@@ -1,0 +1,48 @@
+name: napari-gemspa
+display_name: GEMspa
+contributions:
+  commands:
+    - id: napari-gemspa.get_reader
+      python_name: napari_gemspa._reader:napari_get_reader
+      title: Open data with GEMspa
+    - id: napari-gemspa.write_multiple
+      python_name: napari_gemspa._writer:write_multiple
+      title: Save multi-layer data with GEMspa
+    - id: napari-gemspa.write_single_image
+      python_name: napari_gemspa._writer:write_single_image
+      title: Save image data with GEMspa
+    - id: napari-gemspa.make_sample_data
+      python_name: napari_gemspa._sample_data:make_sample_data
+      title: Load sample data from GEMspa
+    - id: napari-gemspa.make_qwidget
+      python_name: napari_gemspa._widget:ExampleQWidget
+      title: Make example QWidget
+    - id: napari-gemspa.make_magic_widget
+      python_name: napari_gemspa._widget:example_magic_widget
+      title: Make example magic widget
+    - id: napari-gemspa.make_func_widget
+      python_name: napari_gemspa._widget:example_function_widget
+      title: Make example function widget
+  readers:
+    - command: napari-gemspa.get_reader
+      accepts_directories: false
+      filename_patterns: ['*.npy']
+  writers:
+    - command: napari-gemspa.write_multiple
+      layer_types: ['image*','labels*']
+      filename_extensions: []
+    - command: napari-gemspa.write_single_image
+      layer_types: ['image']
+      filename_extensions: ['.npy']
+  sample_data:
+    - command: napari-gemspa.make_sample_data
+      display_name: GEMspa
+      key: unique_id.1
+  widgets:
+    - command: napari-gemspa.make_qwidget
+      display_name: Example QWidget
+    - command: napari-gemspa.make_magic_widget
+      display_name: Example Magic Widget
+    - command: napari-gemspa.make_func_widget
+      autogenerate: true
+      display_name: Example Function Widget
