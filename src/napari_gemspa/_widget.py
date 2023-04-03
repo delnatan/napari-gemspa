@@ -39,6 +39,10 @@ def example_magic_widget(img_layer: "napari.layers.Image"):
     print(f"you have selected {img_layer}")
 
 
+#def example_magic_widget(img_layer: "napari.layers.Image"):
+#    print(f"you have selected {img_layer}")
+
+
 # Uses the `autogenerate: true` flag in the plugin manifest
 # to indicate it should be wrapped as a magicgui to autogenerate
 # a widget.
