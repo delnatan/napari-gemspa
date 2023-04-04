@@ -1,13 +1,14 @@
 import napari
 import numpy
+from skimage import data
 
 def create_viewer():
     # create a new napari viewer object
     viewer = napari.Viewer()
 
     # add some layers to the viewer
-    data = [(numpy.random.rand(512, 512), {})]
-    viewer.add_image(data)
+    cells = data.cells3d()[30, 1]
+    viewer.add_image(cells)
 
     # return the viewer object
     return viewer
