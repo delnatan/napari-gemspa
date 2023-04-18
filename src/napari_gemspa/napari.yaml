@@ -26,6 +26,9 @@ contributions:
     - id: napari-gemspa.make_analyze_traj_widget
       python_name: napari_gemspa._widget:analyze_traj_widget
       title: Make analyze traj widget
+    - id: napari-gemspa.make_analyzeqwidget
+      python_name: napari_gemspa._widget:AnalyzeQWidget
+      title: Make analyze QWidget
   readers:
     - command: napari-gemspa.get_reader
       accepts_directories: false
@@ -49,4 +52,6 @@ contributions:
     - command: napari-gemspa.make_filter_link_widget
       display_name: Filter links
     - command: napari-gemspa.make_analyze_traj_widget
-      display_name: Analyze trajectories
+      display_name: Analyze trajectories (0)
+    - command: napari-gemspa.make_analyzeqwidget
+      display_name: Analyze trajectories (1)

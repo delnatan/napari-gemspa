@@ -2,7 +2,7 @@ __version__ = "0.0.1"
 
 from ._reader import napari_get_reader
 from ._sample_data import make_sample_data
-from ._widget import locate_widget, link_widget, filter_link_widget, analyze_traj_widget
+from ._widget import locate_widget, link_widget, filter_link_widget, analyze_traj_widget, AnalyzeQWidget
 from ._writer import write_multiple, write_single_image
 
 __all__ = (
@@ -14,4 +14,5 @@ __all__ = (
     "link_widget",
     "filter_link_widget",
     "analyze_traj_widget",
+    "AnalyzeQWidget"
 )

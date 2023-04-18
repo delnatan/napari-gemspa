@@ -16,12 +16,12 @@ import napari.types
 from typing import TYPE_CHECKING
 from magicgui import magic_factory
 from qtpy.QtCore import Qt
-from napari.utils.notifications import show_info, show_error
-from qtpy.QtWidgets import QMainWindow
-from ._analyze_tracks_dialog import Ui_Dialog
+from napari.utils.notifications import show_info
+#from qtpy.QtWidgets import QMainWindow
+#from ._analyze_tracks_dialog import Ui_Dialog
 from gemspa_spt import ParticleTracks
-from pyqtgraph import PlotWidget, plot
-import pyqtgraph as pg
+#from pyqtgraph import PlotWidget, plot
+#import pyqtgraph as pg
 
 if TYPE_CHECKING:
     import napari
@@ -69,8 +69,8 @@ def show_plots(df, napari_viewer, data_type="features", width=200, height=300):
     # Resize so height of widgets with the plots are larger
     #for dock_widget in dock_widgets:
     #    dock_widget.setFloating(False)
-    napari_viewer.window.qt_window.resizeDocks(dock_widgets, [height]*len(dock_widgets), Qt.Vertical)
-    napari_viewer.window.qt_window.resizeDocks(dock_widgets, [width]*len(dock_widgets), Qt.Horizontal)
+    #napari_viewer.window.qt_window.resizeDocks(dock_widgets, [height]*len(dock_widgets), Qt.Vertical)
+    #napari_viewer.window.qt_window.resizeDocks(dock_widgets, [width]*len(dock_widgets), Qt.Horizontal)
 
 
 def make_napari_layer(df, data_type='features'):
@@ -193,7 +193,7 @@ def link_widget(viewer: Viewer,
             return make_napari_layer(t1, data_type='links')
 
         else:
-            show_error("Points layer data not compatible with linking.")
+            show_info("Points layer data not compatible with linking.")
 
 
 @magic_factory
@@ -246,6 +246,85 @@ def filter_link_widget(viewer: Viewer,
         return make_napari_layer(t2, data_type='links')
 
 
+import numpy as np
+from qtpy.QtWidgets import (QWidget, QVBoxLayout,
+                            QTableWidget, QAbstractItemView, QTableWidgetItem)
+import qtpy.QtCore
+
+
+class TracksPropertiesTable(QWidget):
+    """Widget to display results from analysis of track data
+    Parameters
+    ----------
+    napari_viewer: QWidget
+        The napari viewer
+    """
+    def __init__(self, napari_viewer):
+        super().__init__()
+        self.viewer = napari_viewer
+        self.layer_name = ''
+
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.setLayout(layout)
+        self.tableWidget = QTableWidget()
+        self.tableWidget.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        layout.addWidget(self.tableWidget)
+        self.setLayout(layout)
+
+    def reload(self):
+        """Reload the particles properties from the layers to the table widget"""
+        particles = self.viewer.layers[self.layer_name].data
+        print(particles)
+        properties = self.viewer.layers[self.layer_name].properties
+        headers = []
+        if particles.shape[1] == 3:
+            headers = ['T', 'Y', 'X']
+        elif particles.shape[1] == 4:
+            headers = ['T', 'Z', 'Y', 'X']
+
+        for key in properties:
+            headers.append(key)
+        self.tableWidget.setColumnCount(len(headers))
+        self.tableWidget.setHorizontalHeaderLabels(headers)
+        self.tableWidget.setRowCount(particles.shape[0])
+
+        col = 0
+        for line in range(particles.shape[0]):
+            col = -1
+
+            # T
+            if particles.shape[1] == 4:
+                col += 1
+                self.tableWidget.setItem(line, col,
+                                         QTableWidgetItem(
+                                             str(particles[line, col])))
+            # T or Z
+            if particles.shape[1] >= 3:
+                col += 1
+                self.tableWidget.setItem(line, col,
+                                         QTableWidgetItem(
+                                             str(particles[line, col])))
+            # Y
+            col += 1
+            self.tableWidget.setItem(line, col,
+                                     QTableWidgetItem(
+                                         str(particles[line, col])))
+            # X
+            col += 1
+            self.tableWidget.setItem(line, col,
+                                     QTableWidgetItem(
+                                         str(particles[line, col])))
+        # properties
+        for key in properties:
+            col += 1
+            prop = properties[key]
+            for line in range(len(prop)):
+                self.tableWidget.setItem(line, col,
+                                         QTableWidgetItem(str(prop[line])))
+
+
+
 @magic_factory
 def analyze_traj_widget(viewer: Viewer,
                         img_layer: napari.layers.Image,
@@ -254,7 +333,7 @@ def analyze_traj_widget(viewer: Viewer,
                         track_id: int = 0,
                         microns_per_pixel: float = 0.11,
                         time_lag_sec: float = 0.010,
-                        max_lagtime_fit: int = 11,
+                        max_lagtime_fit: int = 10,
                         error_term_fit: bool = True,
                         ) -> napari.types.LayerDataTuple:
 
@@ -281,30 +360,56 @@ def analyze_traj_widget(viewer: Viewer,
             tracks.microns_per_pixel = microns_per_pixel
             tracks.time_lag_sec = time_lag_sec
 
-            # Don't need this, testing...
-            #track_lens = tracks.find_track_lengths()
-            #if img_layer is not None:
-            #    track_intensities = tracks.find_track_intensities(movie=img_layer.data, radius=3)
-            #tracks2 = ParticleTracks()
-            #trackpy_df = make_trackpy_table(tracks_layer, data_type='links')
-            #tracks2.read_track_df(trackpy_df, data_format='trackpy')
-            #
-            #ret1 = tracks.find_msd(track_id=7, fft=False)
-            ### End testing...
-
-            res_msd = tracks.find_msds(track_id=7, fft=True)
+            msd1 = tracks.msd(track_id, fft=True)
 
             # Fit for Diffusion coefficient (linear, assume alpha==1)
-            tracks.fit_max_lagtime = max_lagtime_fit
-            tracks.fit_error_term = error_term_fit
+            Dy, Ey, r_squaredy = tracks.fit_msd_linear(t=msd1[1:, 0], msd=msd1[1:, 2], dim=1,
+                                                       max_lagtime=max_lagtime_fit, err=error_term_fit)
+            Dx, Ex, r_squaredx = tracks.fit_msd_linear(t=msd1[1:, 0], msd=msd1[1:, 3], dim=1,
+                                                       max_lagtime=max_lagtime_fit, err=error_term_fit)
+            D,  E,  r_squared  = tracks.fit_msd_linear(t=msd1[1:, 0], msd=msd1[1:, 4], dim=2,
+                                                       max_lagtime=max_lagtime_fit, err=error_term_fit)
 
-            res_D = tracks.fit_linearscale(track_id=track_id)  # D, Err, r_sq
-            res_aexp = tracks.fit_logscale(track_id=track_id)  # K, alpha, r_sq
+            Ky, alphay, r_squaredy = tracks.fit_msd_loglog(t=msd1[1:, 0], msd=msd1[1:, 2], dim=1,
+                                                           max_lagtime=max_lagtime_fit)
+            Kx, alphax, r_squaredx = tracks.fit_msd_loglog(t=msd1[1:, 0], msd=msd1[1:, 3], dim=1,
+                                                           max_lagtime=max_lagtime_fit)
+            K,  alpha,  r_squared  = tracks.fit_msd_loglog(t=msd1[1:, 0], msd=msd1[1:, 4], dim=2,
+                                                           max_lagtime=max_lagtime_fit)
 
             # Make plots, display on new docked widgets
-            #
+            # (MSD of track, with fit line, linear and loglog scale)
+            # Display the D's, E's, r_sq's AND K's, alpha's, r_sq's
+            fig, axs = plt.subplots(1, 2)
+            axs[0].scatter(msd1[1:max_lagtime_fit+1, 0], msd1[1:max_lagtime_fit+1, 4])
+            axs[1].scatter(msd1[1:max_lagtime_fit+1, 0], msd1[1:max_lagtime_fit+1, 4])
+            axs[1].set_xscale('log')
+            axs[1].set_yscale('log')
+            axs[0].set(xlabel='time lag (sec)', ylabel='msd')
+            axs[1].set(xlabel='time lag (sec)', ylabel='msd')
+            axs[0].set_title('msd')
+            axs[1].set_title('msd (log-log)')
+            viewer.window.add_dock_widget(fig.canvas, name="MSD", area="right")
 
-            # Return tracks layer (as-is?) - or don't need to?
+            # Table of results
+            tableWidget = QTableWidget()
+            headers = ['dim', 'D', 'E', 'r_sq', 'K', 'a', 'r_sq']
+            tableWidget.setColumnCount(len(headers))
+            tableWidget.setHorizontalHeaderLabels(headers)
+            tableWidget.setRowCount(3)
+            tableWidget.setItem(0, 0, QTableWidgetItem('y'))
+            tableWidget.setItem(1, 0, QTableWidgetItem('x'))
+            tableWidget.setItem(2, 0, QTableWidgetItem('sum'))
+
+            Dy = np.round(Dy, 4)
+            Dx = np.round(Dx, 4)
+            D = np.round(D, 4)
+
+            tableWidget.setItem(0, 1, QTableWidgetItem(str(Dy)))
+            tableWidget.setItem(1, 1, QTableWidgetItem(str(Dx)))
+            tableWidget.setItem(2, 1, QTableWidgetItem(str(D)))
+
+            viewer.window.add_dock_widget(tableWidget, name="Results", area="right")
 
 
 # ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ####
@@ -396,21 +501,28 @@ def analyze_traj_widget(viewer: Viewer,
 
 
 
-# from qtpy.QtWidgets import QHBoxLayout, QPushButton, QWidget
-# class ExampleQWidget(QWidget):
-#     # your QWidget.__init__ can optionally request the napari viewer instance
-#     # in one of two ways:
-#     # 1. use a parameter called `napari_viewer`, as done here
-#     # 2. use a type annotation of 'napari.viewer.Viewer' for any parameter
-#     def __init__(self, napari_viewer):
-#         super().__init__()
-#         self.viewer = napari_viewer
-#
-#         btn = QPushButton("Click me!")
-#         btn.clicked.connect(self._on_click)
-#
-#         self.setLayout(QHBoxLayout())
-#         self.layout().addWidget(btn)
-#
-#     def _on_click(self):
-#         print("napari has", len(self.viewer.layers), "layers")
+from qtpy.QtWidgets import QHBoxLayout, QPushButton, QWidget
+class AnalyzeQWidget(QWidget):
+    # your QWidget.__init__ can optionally request the napari viewer instance
+    # in one of two ways:
+    # 1. use a parameter called `napari_viewer`, as done here
+    # 2. use a type annotation of 'napari.viewer.Viewer' for any parameter
+    def __init__(self, napari_viewer):
+        super().__init__()
+        self.viewer = napari_viewer
+
+        self.properties_viewer = TracksPropertiesTable(self.viewer)
+        self.properties_viewer.setVisible(False)
+        self.properties_viewer.setWindowFlag(qtpy.QtCore.Qt.WindowStaysOnTopHint, True)
+
+        btn = QPushButton("Click me!")
+        btn.clicked.connect(self._on_click)
+
+        self.setLayout(QHBoxLayout())
+        self.layout().addWidget(btn)
+
+    def _on_click(self):
+        print("napari has", len(self.viewer.layers), "layers")
+
+        # properties_viewer.reload()
+        self.properties_viewer.show()
