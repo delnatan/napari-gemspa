@@ -71,8 +71,8 @@ def show_plots(df, napari_viewer, data_type="features", width=200, height=300):
     # Resize so height of widgets with the plots are larger
     #for dock_widget in dock_widgets:
     #    dock_widget.setFloating(False)
-    napari_viewer.window.qt_window.resizeDocks(dock_widgets, [height]*len(dock_widgets), Qt.Vertical)
-    napari_viewer.window.qt_window.resizeDocks(dock_widgets, [width]*len(dock_widgets), Qt.Horizontal)
+    #napari_viewer.window.qt_window.resizeDocks(dock_widgets, [height]*len(dock_widgets), Qt.Vertical)
+    #napari_viewer.window.qt_window.resizeDocks(dock_widgets, [width]*len(dock_widgets), Qt.Horizontal)
 
 
 def make_napari_layer(df, data_type='features'):
