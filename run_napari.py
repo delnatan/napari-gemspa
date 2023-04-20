@@ -14,7 +14,7 @@ def create_viewer():
     movie = io.imread(os.path.join(path, example_tif_movie))
     viewer.add_image(movie)
 
-    full_test=True
+    full_test=False
     if full_test:
 
         # Perform locate...
@@ -42,7 +42,7 @@ def create_viewer():
         layer_data = my_widget(viewer,
                                viewer.layers[0],
                                viewer.layers[2],
-                               batch=False,
+                               batch=True,
                                track_id=7,
                                microns_per_pixel=0.11,
                                time_lag_sec=0.010,

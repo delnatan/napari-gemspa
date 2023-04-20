@@ -17,6 +17,8 @@ from typing import TYPE_CHECKING
 from magicgui import magic_factory
 from qtpy.QtCore import Qt
 from napari.utils.notifications import show_info
+from qtpy.QtWidgets import QTableWidget, QTableWidgetItem
+
 #from qtpy.QtWidgets import QMainWindow
 #from ._analyze_tracks_dialog import Ui_Dialog
 from gemspa_spt import ParticleTracks
@@ -69,8 +71,8 @@ def show_plots(df, napari_viewer, data_type="features", width=200, height=300):
     # Resize so height of widgets with the plots are larger
     #for dock_widget in dock_widgets:
     #    dock_widget.setFloating(False)
-    #napari_viewer.window.qt_window.resizeDocks(dock_widgets, [height]*len(dock_widgets), Qt.Vertical)
-    #napari_viewer.window.qt_window.resizeDocks(dock_widgets, [width]*len(dock_widgets), Qt.Horizontal)
+    napari_viewer.window.qt_window.resizeDocks(dock_widgets, [height]*len(dock_widgets), Qt.Vertical)
+    napari_viewer.window.qt_window.resizeDocks(dock_widgets, [width]*len(dock_widgets), Qt.Horizontal)
 
 
 def make_napari_layer(df, data_type='features'):
@@ -246,9 +248,210 @@ def filter_link_widget(viewer: Viewer,
         return make_napari_layer(t2, data_type='links')
 
 
-import numpy as np
-from qtpy.QtWidgets import (QWidget, QVBoxLayout,
-                            QTableWidget, QAbstractItemView, QTableWidgetItem)
+def fill_table_widget(tw, df):
+    tw.setColumnCount(len(df.columns))
+    tw.setHorizontalHeaderLabels(df.columns)
+    tw.setRowCount(len(df))
+
+    for i, row in enumerate(df.iterrows()):
+        for j, col in enumerate(df.columns):
+            tw.setItem(i, j, QTableWidgetItem(str(row[1][col])))
+
+
+@magic_factory
+def analyze_traj_widget(viewer: Viewer,
+                        img_layer: napari.layers.Image,
+                        tracks_layer: napari.layers.Tracks,
+                        batch: bool = False,
+                        track_id: int = 0,
+                        microns_per_pixel: float = 0.11,
+                        time_lag_sec: float = 0.010,
+                        max_lagtime_fit: int = 10,
+                        error_term_fit: bool = True,
+                        ) -> napari.types.LayerDataTuple:
+
+    if tracks_layer is not None:
+        # Read tracks layer data
+        tracks = ParticleTracks(tracks_layer.data)
+
+        if batch:
+            # MSD for all tracks
+            tracks.microns_per_pixel = microns_per_pixel
+            tracks.time_lag_sec = time_lag_sec
+
+            # Ensemble average eff-D (linear) and alpha (log-log)
+            msds = tracks.msd_all_tracks()
+            ens_msds, n_ens_tracks = tracks.ensemble_avg_msd()
+
+            # Ensemble MSD plot - only showing the 2d (sum)
+            fig, axs = plt.subplots(1, 2)
+            axs[0].scatter(ens_msds[1:max_lagtime_fit + 1, 0], ens_msds[1:max_lagtime_fit + 1, 4])
+            axs[1].scatter(ens_msds[1:max_lagtime_fit + 1, 0], ens_msds[1:max_lagtime_fit + 1, 4])
+            axs[1].set_xscale('log')
+            axs[1].set_yscale('log')
+            axs[0].set(xlabel='time lag (sec)', ylabel='msd')
+            axs[1].set(xlabel='time lag (sec)', ylabel='msd')
+            axs[0].set_title('ensemble-avg msd')
+            axs[1].set_title('ensemble-avg msd (log-log)')
+            viewer.window.add_dock_widget(fig.canvas, name="ensemble-avg MSD", area="right")
+
+            # fit ensemble MSD, get D and alpha
+            D, E, r_squared1 = tracks.fit_msd_linear(t=ens_msds[1:, 0], msd=ens_msds[1:, 4], dim=2,
+                                                     max_lagtime=max_lagtime_fit, err=error_term_fit)
+            K, alpha, r_squared2 = tracks.fit_msd_loglog(t=ens_msds[1:, 0], msd=ens_msds[1:, 4], dim=2,
+                                                         max_lagtime=max_lagtime_fit)
+            data = [['x+y', round(D, 4),
+                             round(E, 4),
+                             round(r_squared1, 2),
+                             round(K, 4),
+                             round(alpha, 4),
+                             round(r_squared2, 2)]]
+            data = pd.DataFrame(data, columns=['dim', 'D', 'E', 'r_sq (lin)', 'K', 'a', 'r_sq (log)'])
+
+            # Table of results
+            table_widget = QTableWidget()
+            fill_table_widget(table_widget, data)
+            viewer.window.add_dock_widget(table_widget, name="Results", area="bottom")
+
+            # Pop up new widget (not docked) that shows all track analysis data in tabular format
+
+            # add to properties of tracks layer: will contain information on:
+            # eff-D, alpha, etc
+
+            # Return tracks layer2
+        else:
+            # MSD for the track
+            tracks.microns_per_pixel = microns_per_pixel
+            tracks.time_lag_sec = time_lag_sec
+
+            msd1 = tracks.msd(track_id, fft=True)
+
+            # Fit for Diffusion coefficient etc
+            dim_dict = {'x': [3, 1], 'y': [2, 1], 'x+y': [4, 2]}
+            data = []
+            for dim in dim_dict.keys():
+                col = dim_dict[dim][0]
+                d = dim_dict[dim][1]
+                D, E, r_squared1 = tracks.fit_msd_linear(t=msd1[1:, 0], msd=msd1[1:, col], dim=d,
+                                                        max_lagtime=max_lagtime_fit, err=error_term_fit)
+                K, alpha, r_squared2 = tracks.fit_msd_loglog(t=msd1[1:, 0], msd=msd1[1:, col], dim=d,
+                                                             max_lagtime=max_lagtime_fit)
+                data.append([dim,
+                             round(D, 4),
+                             round(E, 4),
+                             round(r_squared1, 2),
+                             round(K, 4),
+                             round(alpha, 4),
+                             round(r_squared2, 2)])
+            data = pd.DataFrame(data, columns=['dim', 'D', 'E', 'r_sq (lin)', 'K', 'a', 'r_sq (log)'])
+
+            # Make plots, display on new docked widgets
+            # (MSD of track, with fit line, linear and loglog scale)
+            # Display the D's, E's, r_sq's AND K's, alpha's, r_sq's
+            fig, axs = plt.subplots(1, 2)
+            axs[0].scatter(msd1[1:max_lagtime_fit+1, 0], msd1[1:max_lagtime_fit+1, 4])
+            axs[1].scatter(msd1[1:max_lagtime_fit+1, 0], msd1[1:max_lagtime_fit+1, 4])
+            axs[1].set_xscale('log')
+            axs[1].set_yscale('log')
+            axs[0].set(xlabel='time lag (sec)', ylabel='msd')
+            axs[1].set(xlabel='time lag (sec)', ylabel='msd')
+            axs[0].set_title('msd')
+            axs[1].set_title('msd (log-log)')
+            viewer.window.add_dock_widget(fig.canvas, name="MSD", area="right")
+
+            # Table of results
+            table_widget = QTableWidget()
+            fill_table_widget(table_widget, data)
+            viewer.window.add_dock_widget(table_widget, name="Results", area="bottom")
+
+
+# ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ####
+# class AnalyzeWidget(QMainWindow):
+#     def __init__(self, napari_viewer, parent=None):
+#         super().__init__(parent)
+#
+#         self.ui = Ui_Dialog()
+#         self.ui.setupUi(self)
+#         self.connectSignalsSlots()
+#
+#         self.viewer = napari_viewer
+#
+#     def connectSignalsSlots(self):
+#         self.ui.go_pushButton.clicked.connect(self._on_click_go_pushButton)
+#
+#     def _on_click_go_pushButton(self):
+#         # get the tracks layer
+#         # perform analysis
+#         print("In Run")
+
+
+# class AnalyzeMainWindow(QMainWindow):
+#
+#     def __init__(self, napari_viewer, *args, **kwargs):
+#         super(AnalyzeMainWindow, self).__init__(*args, **kwargs)
+#
+#         self.viewer = napari_viewer
+#
+#         # draw the input GUI elements
+#         # batch: bool = False,
+#         # track_id: int = 0,
+#         # microns_per_pixel: float = 0.11,
+#         # frames_per_sec: float = 0.01,
+#         # fit_max_lagtime: int = 11,
+#         # fit_error_term: bool = True,
+#
+#         #btn = QtWidgets.QPushButton("Click me!")
+#         #btn.clicked.connect(self._on_click)
+#
+#         #self.setLayout(QHBoxLayout())
+#         #self.layout().addWidget(btn)
+#
+#     def _on_click(self):
+#
+#         #if tracks_layer is not None:
+#         # # Read tracks layer data
+#         #         tracks = ParticleTracks(tracks_layer.data)
+#         #
+#         #         if batch:
+#         #             pass
+#         #             # Ensemble average eff-D (linear) and alpha (log-log)
+#         #
+#         #             # Output plots
+#         #
+#         #             # add to properties of tracks layer: will contain information on:
+#         #             # eff-D, alpha, etc
+#         #
+#         #             # Return tracks layer
+#         #             return ()
+#         #         else:
+#         #             # MSD for the track
+#         #             tracks.microns_per_pixel = microns_per_pixel
+#         #             tracks.frames_per_sec = frames_per_sec
+#         #             lag, msd_x, msd_y, msd_2d = tracks.msd(track_id=track_id)
+#         #
+#         #             # Fit for Diffusion coefficient (linear, assume alpha==1)
+#         #             tracks.fit_max_lagtime = fit_max_lagtime
+#         #             tracks.fit_error_term = fit_error_term
+#         #             D, Err, r_sq = tracks.linear_fit_D(track_id=track_id)
+#         #
+#         #             # Fit for alpha (log-log fit; alpha is the slope)
+#         #             K, alpha, r_sq = tracks.linear_fit_D(track_id=track_id)
+#         #
+#         #             # Make plots, display on widget
+#         #             #main = MainWindow()
+#         #             #main.show()
+#
+#         self.graphWidget = pg.PlotWidget()
+#         self.setCentralWidget(self.graphWidget)
+#
+#         hour = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+#         temperature = [30, 32, 34, 32, 33, 31, 29, 32, 35, 45]
+#
+#         # plot data: x, y values
+#         self.graphWidget.plot(hour, temperature)
+
+
+from qtpy.QtWidgets import QHBoxLayout, QVBoxLayout, QPushButton, QWidget, QAbstractItemView
 import qtpy.QtCore
 
 
@@ -324,184 +527,6 @@ class TracksPropertiesTable(QWidget):
                                          QTableWidgetItem(str(prop[line])))
 
 
-
-@magic_factory
-def analyze_traj_widget(viewer: Viewer,
-                        img_layer: napari.layers.Image,
-                        tracks_layer: napari.layers.Tracks,
-                        batch: bool = False,
-                        track_id: int = 0,
-                        microns_per_pixel: float = 0.11,
-                        time_lag_sec: float = 0.010,
-                        max_lagtime_fit: int = 10,
-                        error_term_fit: bool = True,
-                        ) -> napari.types.LayerDataTuple:
-
-    if tracks_layer is not None:
-        # Read tracks layer data
-        tracks = ParticleTracks(tracks_layer.data)
-
-        if batch:
-            pass
-            # Ensemble average eff-D (linear) and alpha (log-log)
-
-            # Make plots, display on new docked widgets
-            #
-
-            # Pop up new widget (not docked) that shows all track analysis data in tabular format
-
-            # add to properties of tracks layer: will contain information on:
-            # eff-D, alpha, etc
-
-            # Return tracks layer2
-            return ()
-        else:
-            # MSD for the track
-            tracks.microns_per_pixel = microns_per_pixel
-            tracks.time_lag_sec = time_lag_sec
-
-            msd1 = tracks.msd(track_id, fft=True)
-
-            # Fit for Diffusion coefficient (linear, assume alpha==1)
-            Dy, Ey, r_squaredy = tracks.fit_msd_linear(t=msd1[1:, 0], msd=msd1[1:, 2], dim=1,
-                                                       max_lagtime=max_lagtime_fit, err=error_term_fit)
-            Dx, Ex, r_squaredx = tracks.fit_msd_linear(t=msd1[1:, 0], msd=msd1[1:, 3], dim=1,
-                                                       max_lagtime=max_lagtime_fit, err=error_term_fit)
-            D,  E,  r_squared  = tracks.fit_msd_linear(t=msd1[1:, 0], msd=msd1[1:, 4], dim=2,
-                                                       max_lagtime=max_lagtime_fit, err=error_term_fit)
-
-            Ky, alphay, r_squaredy = tracks.fit_msd_loglog(t=msd1[1:, 0], msd=msd1[1:, 2], dim=1,
-                                                           max_lagtime=max_lagtime_fit)
-            Kx, alphax, r_squaredx = tracks.fit_msd_loglog(t=msd1[1:, 0], msd=msd1[1:, 3], dim=1,
-                                                           max_lagtime=max_lagtime_fit)
-            K,  alpha,  r_squared  = tracks.fit_msd_loglog(t=msd1[1:, 0], msd=msd1[1:, 4], dim=2,
-                                                           max_lagtime=max_lagtime_fit)
-
-            # Make plots, display on new docked widgets
-            # (MSD of track, with fit line, linear and loglog scale)
-            # Display the D's, E's, r_sq's AND K's, alpha's, r_sq's
-            fig, axs = plt.subplots(1, 2)
-            axs[0].scatter(msd1[1:max_lagtime_fit+1, 0], msd1[1:max_lagtime_fit+1, 4])
-            axs[1].scatter(msd1[1:max_lagtime_fit+1, 0], msd1[1:max_lagtime_fit+1, 4])
-            axs[1].set_xscale('log')
-            axs[1].set_yscale('log')
-            axs[0].set(xlabel='time lag (sec)', ylabel='msd')
-            axs[1].set(xlabel='time lag (sec)', ylabel='msd')
-            axs[0].set_title('msd')
-            axs[1].set_title('msd (log-log)')
-            viewer.window.add_dock_widget(fig.canvas, name="MSD", area="right")
-
-            # Table of results
-            tableWidget = QTableWidget()
-            headers = ['dim', 'D', 'E', 'r_sq', 'K', 'a', 'r_sq']
-            tableWidget.setColumnCount(len(headers))
-            tableWidget.setHorizontalHeaderLabels(headers)
-            tableWidget.setRowCount(3)
-            tableWidget.setItem(0, 0, QTableWidgetItem('y'))
-            tableWidget.setItem(1, 0, QTableWidgetItem('x'))
-            tableWidget.setItem(2, 0, QTableWidgetItem('sum'))
-
-            Dy = np.round(Dy, 4)
-            Dx = np.round(Dx, 4)
-            D = np.round(D, 4)
-
-            tableWidget.setItem(0, 1, QTableWidgetItem(str(Dy)))
-            tableWidget.setItem(1, 1, QTableWidgetItem(str(Dx)))
-            tableWidget.setItem(2, 1, QTableWidgetItem(str(D)))
-
-            viewer.window.add_dock_widget(tableWidget, name="Results", area="right")
-
-
-# ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ####
-# class AnalyzeWidget(QMainWindow):
-#     def __init__(self, napari_viewer, parent=None):
-#         super().__init__(parent)
-#
-#         self.ui = Ui_Dialog()
-#         self.ui.setupUi(self)
-#         self.connectSignalsSlots()
-#
-#         self.viewer = napari_viewer
-#
-#     def connectSignalsSlots(self):
-#         self.ui.go_pushButton.clicked.connect(self._on_click_go_pushButton)
-#
-#     def _on_click_go_pushButton(self):
-#         # get the tracks layer
-#         # perform analysis
-#         print("In Run")
-
-
-
-# class AnalyzeMainWindow(QMainWindow):
-#
-#     def __init__(self, napari_viewer, *args, **kwargs):
-#         super(AnalyzeMainWindow, self).__init__(*args, **kwargs)
-#
-#         self.viewer = napari_viewer
-#
-#         # draw the input GUI elements
-#         # batch: bool = False,
-#         # track_id: int = 0,
-#         # microns_per_pixel: float = 0.11,
-#         # frames_per_sec: float = 0.01,
-#         # fit_max_lagtime: int = 11,
-#         # fit_error_term: bool = True,
-#
-#         #btn = QtWidgets.QPushButton("Click me!")
-#         #btn.clicked.connect(self._on_click)
-#
-#         #self.setLayout(QHBoxLayout())
-#         #self.layout().addWidget(btn)
-#
-#     def _on_click(self):
-#
-#         #if tracks_layer is not None:
-#         # # Read tracks layer data
-#         #         tracks = ParticleTracks(tracks_layer.data)
-#         #
-#         #         if batch:
-#         #             pass
-#         #             # Ensemble average eff-D (linear) and alpha (log-log)
-#         #
-#         #             # Output plots
-#         #
-#         #             # add to properties of tracks layer: will contain information on:
-#         #             # eff-D, alpha, etc
-#         #
-#         #             # Return tracks layer
-#         #             return ()
-#         #         else:
-#         #             # MSD for the track
-#         #             tracks.microns_per_pixel = microns_per_pixel
-#         #             tracks.frames_per_sec = frames_per_sec
-#         #             lag, msd_x, msd_y, msd_2d = tracks.msd(track_id=track_id)
-#         #
-#         #             # Fit for Diffusion coefficient (linear, assume alpha==1)
-#         #             tracks.fit_max_lagtime = fit_max_lagtime
-#         #             tracks.fit_error_term = fit_error_term
-#         #             D, Err, r_sq = tracks.linear_fit_D(track_id=track_id)
-#         #
-#         #             # Fit for alpha (log-log fit; alpha is the slope)
-#         #             K, alpha, r_sq = tracks.linear_fit_D(track_id=track_id)
-#         #
-#         #             # Make plots, display on widget
-#         #             #main = MainWindow()
-#         #             #main.show()
-#
-#         self.graphWidget = pg.PlotWidget()
-#         self.setCentralWidget(self.graphWidget)
-#
-#         hour = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-#         temperature = [30, 32, 34, 32, 33, 31, 29, 32, 35, 45]
-#
-#         # plot data: x, y values
-#         self.graphWidget.plot(hour, temperature)
-
-
-
-
-from qtpy.QtWidgets import QHBoxLayout, QPushButton, QWidget
 class AnalyzeQWidget(QWidget):
     # your QWidget.__init__ can optionally request the napari viewer instance
     # in one of two ways:
