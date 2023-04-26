@@ -266,8 +266,10 @@ def analyze_traj_widget(viewer: Viewer,
                         track_id: int = 0,
                         microns_per_pixel: float = 0.11,
                         time_lag_sec: float = 0.010,
+                        min_len_fit: int = 11,
                         max_lagtime_fit: int = 10,
                         error_term_fit: bool = True,
+                        show_all_dimensions: bool = False,
                         ) -> napari.types.LayerDataTuple:
 
     if tracks_layer is not None:
@@ -301,11 +303,11 @@ def analyze_traj_widget(viewer: Viewer,
             K, alpha, r_squared2 = tracks.fit_msd_loglog(t=ens_msds[1:, 0], msd=ens_msds[1:, 4], dim=2,
                                                          max_lagtime=max_lagtime_fit)
             data = [['x+y', round(D, 4),
-                             round(E, 4),
-                             round(r_squared1, 2),
-                             round(K, 4),
-                             round(alpha, 4),
-                             round(r_squared2, 2)]]
+                            round(E, 4),
+                            round(r_squared1, 2),
+                            round(K, 4),
+                            round(alpha, 4),
+                            round(r_squared2, 2)]]
             data = pd.DataFrame(data, columns=['dim', 'D', 'E', 'r_sq (lin)', 'K', 'a', 'r_sq (log)'])
 
             # Table of results
@@ -313,7 +315,19 @@ def analyze_traj_widget(viewer: Viewer,
             fill_table_widget(table_widget, data)
             viewer.window.add_dock_widget(table_widget, name="Results", area="bottom")
 
-            # Pop up new widget (not docked) that shows all track analysis data in tabular format
+            # fit the msd of each track - linear and loglog scale
+            tracks.fit_msd_all_tracks(linear_fit=True, min_len=min_len_fit, max_lagtime=max_lagtime_fit,
+                                      err=error_term_fit)
+            tracks.fit_msd_all_tracks(linear_fit=False, min_len=min_len_fit, max_lagtime=max_lagtime_fit,
+                                      err=error_term_fit)
+
+            # Gather the fit data and fill table
+            table_widget = QTableWidget()
+            data = pd.DataFrame(np.concatenate([tracks.linear_fit_results, tracks.loglog_fit_results[:, 2:]], axis=1),
+                         columns=['track_id', 'dim', 'D', 'E', 'r_sq (lin)', 'K', 'a', 'r_sq (log)'])
+            fill_table_widget(table_widget, data)
+            viewer.window.add_dock_widget(table_widget, name="Results-all", area="bottom")
+
 
             # add to properties of tracks layer: will contain information on:
             # eff-D, alpha, etc
