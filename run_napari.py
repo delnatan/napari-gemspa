@@ -47,9 +47,8 @@ def create_viewer():
                                microns_per_pixel=0.11,
                                time_lag_sec=0.010,
                                max_lagtime_fit=10,
-                               min_len_fit = 11,
-                               error_term_fit=True,
-                               show_all_dimensions=False)
+                               min_len_fit=11,
+                               error_term_fit=True)
 
     # return the viewer object
     return viewer

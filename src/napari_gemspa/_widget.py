@@ -268,8 +268,7 @@ def analyze_traj_widget(viewer: Viewer,
                         time_lag_sec: float = 0.010,
                         min_len_fit: int = 11,
                         max_lagtime_fit: int = 10,
-                        error_term_fit: bool = True,
-                        show_all_dimensions: bool = False,
+                        error_term_fit: bool = True
                         ) -> napari.types.LayerDataTuple:
 
     if tracks_layer is not None:
@@ -302,12 +301,13 @@ def analyze_traj_widget(viewer: Viewer,
                                                      max_lagtime=max_lagtime_fit, err=error_term_fit)
             K, alpha, r_squared2 = tracks.fit_msd_loglog(t=ens_msds[1:, 0], msd=ens_msds[1:, 4], dim=2,
                                                          max_lagtime=max_lagtime_fit)
-            data = [['x+y', round(D, 4),
-                            round(E, 4),
-                            round(r_squared1, 2),
-                            round(K, 4),
-                            round(alpha, 4),
-                            round(r_squared2, 2)]]
+            data = [['x+y',
+                     round(D, 4),
+                     round(E, 4),
+                     round(r_squared1, 2),
+                     round(K, 4),
+                     round(alpha, 4),
+                     round(r_squared2, 2)]]
             data = pd.DataFrame(data, columns=['dim', 'D', 'E', 'r_sq (lin)', 'K', 'a', 'r_sq (log)'])
 
             # Table of results
@@ -324,15 +324,29 @@ def analyze_traj_widget(viewer: Viewer,
             # Gather the fit data and fill table
             table_widget = QTableWidget()
             data = pd.DataFrame(np.concatenate([tracks.linear_fit_results, tracks.loglog_fit_results[:, 2:]], axis=1),
-                         columns=['track_id', 'dim', 'D', 'E', 'r_sq (lin)', 'K', 'a', 'r_sq (log)'])
+                                columns=['track_id', 'dim', 'D', 'E', 'r_sq (lin)', 'K', 'a', 'r_sq (log)'])
+            data.drop('dim', axis=1, inplace=True)
+            data = data.round({'D': 4, 'E': 4, 'r_sq (lin)': 2, 'K': 4, 'a': 4, 'r_sq (log)': 2})
+
             fill_table_widget(table_widget, data)
             viewer.window.add_dock_widget(table_widget, name="Results-all", area="bottom")
 
+            show_info(f"Total number of tracks: {len(tracks.track_ids)}\n" +
+                      f"After length filter, number of tracks: {len(data)}\n")
 
-            # add to properties of tracks layer: will contain information on:
-            # eff-D, alpha, etc
+            # Add information from fitting to properties of a newTracks Layer
+            track_data = pd.DataFrame(tracks.tracks, columns=ParticleTracks.file_columns['napari'])
+            data = track_data.merge(data, how='right', on='track_id')
 
-            # Return tracks layer2
+            props = {}
+            for col in data.columns:
+                if col not in ParticleTracks.file_columns['napari']:
+                    props[col] = data[col].to_numpy()
+
+            return napari.types.LayerDataTuple((data[ParticleTracks.file_columns['napari']],
+                                                {'properties': props},
+                                                'tracks'))
+
         else:
             # MSD for the track
             tracks.microns_per_pixel = microns_per_pixel
@@ -347,7 +361,7 @@ def analyze_traj_widget(viewer: Viewer,
                 col = dim_dict[dim][0]
                 d = dim_dict[dim][1]
                 D, E, r_squared1 = tracks.fit_msd_linear(t=msd1[1:, 0], msd=msd1[1:, col], dim=d,
-                                                        max_lagtime=max_lagtime_fit, err=error_term_fit)
+                                                         max_lagtime=max_lagtime_fit, err=error_term_fit)
                 K, alpha, r_squared2 = tracks.fit_msd_loglog(t=msd1[1:, 0], msd=msd1[1:, col], dim=d,
                                                              max_lagtime=max_lagtime_fit)
                 data.append([dim,
