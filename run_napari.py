@@ -14,7 +14,7 @@ def create_viewer():
     movie = io.imread(os.path.join(path, example_tif_movie))
     viewer.add_image(movie)
 
-    full_test=True
+    full_test=False
     if full_test:
 
         # Perform locate...
