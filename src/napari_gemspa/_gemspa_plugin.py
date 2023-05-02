@@ -3,6 +3,9 @@ from qtpy import QtCore
 from qtpy.QtCore import Signal, QThread, QObject
 
 
+"""Defines: GEMspaWidget, GEMspaWorker, GEMspaLogWidget, GEMspaPlugin"""
+
+
 class GEMspaWidget(QWidget):
     """Definition of a GEMspa napari widget
 
@@ -134,7 +137,7 @@ class GEMspaPlugin(QWidget):
         self.run_btn = None
         self.log_widget = GEMspaLogWidget()
 
-    def init_gui(self):
+    def init_ui(self):
         """Initialize the plugin graphical interface
         Add a run button and a log widget to the plugin
         """

@@ -1,87 +1,11 @@
 from ._gemspa_plugin import GEMspaPlugin, GEMspaWidget, GEMspaWorker
+from ._gemspa_data_views import GEMspaTableWindow, GEMspaPlottingWindow
 import napari
 import trackpy as tp
-import qtpy.QtCore
-from qtpy.QtWidgets import (QWidget, QGridLayout, QLabel, QPushButton,
-                            QLineEdit, QCheckBox, QHBoxLayout, QVBoxLayout, QComboBox,
-                            QTableWidget, QAbstractItemView, QTableWidgetItem,
-                            QScrollArea)
-import qtpy.QtCore as QtCore
-from qtpy.QtCore import Signal
+from qtpy.QtWidgets import (QGridLayout, QLabel, QLineEdit, QCheckBox, QComboBox)
 
 
-class GEMspaLayerPropsViewer(QWidget):
-    """Widget to display layer property data as a table
-
-    Parameters
-    ----------
-    napari_viewer: QWidget
-        The napari viewer
-
-    """
-    def __init__(self, napari_viewer):
-        super().__init__()
-        self.viewer = napari_viewer
-        self.layer_name = ''
-
-        layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        self.setLayout(layout)
-        self.tableWidget = QTableWidget()
-        self.tableWidget.setEditTriggers(QAbstractItemView.NoEditTriggers)  # TODO: allow Edit?
-        layout.addWidget(self.tableWidget)
-        self.setLayout(layout)
-
-    def reload(self):
-        """Reload the properties from the layer to the table widget"""
-
-        data = self.viewer.layers[self.layer_name].data
-        properties = self.viewer.layers[self.layer_name].properties
-
-        # Assume layer is Points layer, TODO: add tracks layer
-        # Other layer types not supported
-
-        headers = []
-        if data.shape[1] == 3:
-            headers = ['t', 'y', 'x']
-        elif data.shape[1] == 4:
-            headers = ['t', 'z', 'y', 'x']
-
-        for key in properties:
-            headers.append(key)
-
-        self.tableWidget.setColumnCount(len(headers))
-        self.tableWidget.setHorizontalHeaderLabels(headers)
-        self.tableWidget.setRowCount(data.shape[0])
-
-        col = 0
-        for line in range(data.shape[0]):
-            col = -1
-
-            # t
-            if data.shape[1] == 4:
-                col += 1
-                self.tableWidget.setItem(line, col, QTableWidgetItem(str(data[line, col])))
-
-            # t or z
-            if data.shape[1] >= 3:
-                col += 1
-                self.tableWidget.setItem(line, col, QTableWidgetItem( str(data[line, col])))
-
-            # y
-            col += 1
-            self.tableWidget.setItem(line, col, QTableWidgetItem(str(data[line, col])))
-
-            # x
-            col += 1
-            self.tableWidget.setItem(line, col, QTableWidgetItem(str(data[line, col])))
-
-        # properties
-        for key in properties:
-            col += 1
-            prop = properties[key]
-            for line in range(len(prop)):
-                self.tableWidget.setItem(line, col, QTableWidgetItem(str(prop[line])))
+"""Defines: GEMspaLocateWidget, GEMspaLocateWorker, GEMspaLocatePlugin"""
 
 
 class GEMspaLocateWidget(GEMspaWidget):
@@ -91,14 +15,15 @@ class GEMspaLocateWidget(GEMspaWidget):
         super().__init__()
         self.viewer = napari_viewer
 
-        napari_viewer.events.layers_change.connect(self._on_layer_change)
+        napari_viewer.layers.events.connect(self._on_layer_change)
 
         # viewer for feature properties
-        self.properties_viewer = GEMspaLayerPropsViewer(napari_viewer)
+        self.properties_viewer = GEMspaTableWindow(napari_viewer)
         self.properties_viewer.setVisible(False)
-        self.properties_viewer.setWindowFlag(qtpy.QtCore.Qt.WindowStaysOnTopHint, True)
 
-        # TODO: add button to just show properties of a selected layer?
+        # viewer for the graphical output
+        self.plots_viewer = GEMspaPlottingWindow(napari_viewer)
+        self.plots_viewer.setVisible(False)
 
         # Set up the input GUI items
         self._input_layer_box = QComboBox()
@@ -126,7 +51,7 @@ class GEMspaLocateWidget(GEMspaWidget):
         layout.addWidget(self._min_mass_label, 3, 0)
         layout.addWidget(self._min_mass_value, 3, 1)
 
-        layout.addWidget(self._current_frame_check, 4, 0, 1, 2)
+        layout.addWidget(self._invert_check, 4, 0, 1, 2)
 
         self.setLayout(layout)
 
@@ -187,23 +112,25 @@ class GEMspaLocateWidget(GEMspaWidget):
     def state(self) -> dict:
         return {'name': 'GEMspaLocateWidget',
                 'inputs': {'image': self._input_layer_box.currentText()},
-                'parameters': {'diameter': float(self._min_sigma_value.text()),
-                               'min_mass': float(self._max_sigma_value.text()),
-                               'invert': self._current_frame_check.isChecked(),
+                'parameters': {'diameter': float(self._diameter_value.text()),
+                               'min_mass': float(self._min_mass_value.text()),
+                               'invert': self._invert_check.isChecked(),
                                'current_frame': self._current_frame_check.isChecked()
                                },
                 'outputs': ['points', 'trackpy detections']
                 }
 
-    def show_properties(self):
+    def show_properties(self, layer_name):
         """reload and display the particles properties in a popup window"""
-        self._on_show_properties()
-
-    def _on_show_properties(self):
-        """Callback called when the properties are calculate/updated"""
-        self.properties_viewer.layer_name = self._input_layer_box.currentText()
+        self.properties_viewer.layer_name = layer_name
         self.properties_viewer.reload()
         self.properties_viewer.show()
+
+    def show_plots(self, layer_name):
+        """reload and display the particles properties in a popup window"""
+        self.plots_viewer.layer_name = layer_name
+        self.plots_viewer.reload()
+        self.plots_viewer.show()
 
 
 class GEMspaLocateWorker(GEMspaWorker):
@@ -231,9 +158,9 @@ class GEMspaLocateWorker(GEMspaWorker):
         tp.quiet()  # trackpy to quiet mode
         if state_params['current_frame']:
             # Only process the current frame
-            cur_frame = self.viewer.layers[input_image_layer]._data_view
-            t = self.viewer.dims.current_step[0]  # does this retrieve same info as above line?
-            f = tp.locate(raw_image=cur_frame,
+            #cur_frame = self.viewer.layers[input_image_layer]._data_view
+            t = self.viewer.dims.current_step[0]
+            f = tp.locate(raw_image=image[t],
                           diameter=diameter,
                           minmass=min_mass,
                           invert=invert)
@@ -244,12 +171,12 @@ class GEMspaLocateWorker(GEMspaWorker):
                          minmass=min_mass,
                          invert=invert)
 
-        # TODO: add 'frame' (t) if does not exist
         # TODO: can trackpy handle 3d data?
-        if 'frame' in f.columns:
-            data = f[['frame', 'y', 'x']].astype('int').to_numpy()
-        else:
-            data = f[['y', 'x']].astype('int').to_numpy()
+        # TODO: fix for when the image does not have a time dimension!?
+        if 'frame' not in f.columns:
+            f['frame'] = t
+
+        data = f[['frame', 'y', 'x']].to_numpy() #.astype('int').to_numpy()
 
         props = {}
         for col in f.columns:
@@ -267,16 +194,16 @@ class GEMspaLocateWorker(GEMspaWorker):
 
     def set_outputs(self):
         """Set the plugin outputs to napari layers"""
-        self.viewer.add_points(self._out_data['data'], **self._out_data['kwargs'])
+        layer = self.viewer.add_points(self._out_data['data'], **self._out_data['kwargs'])
 
-        # Show properties from the layer in a table (pop-up)
-        self.widget.show_properties()
+        # Show properties from the new layer in a table (pop-up)
+        self.widget.show_properties(layer.name)
 
         # Show plots as a pop-up widget
-        # TODO
+        self.widget.show_plots(layer.name)
 
 
-class GEMspaLocate(GEMspaPlugin):
+class GEMspaLocatePlugin(GEMspaPlugin):
 
     """Napari plugin for locating features with trackpy
 
