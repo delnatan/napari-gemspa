@@ -1,111 +1,15 @@
-from qtpy.QtWidgets import (QWidget, QLabel, QPushButton, QVBoxLayout, QTextEdit, QMessageBox)
+from ._gemspa_locate_widget import GEMspaLocateWidget, GEMspaLocateWorker
+from ._gemspa_widget import GEMspaLogWidget
+from qtpy.QtWidgets import (QWidget, QLabel, QPushButton, QVBoxLayout, QTextEdit, QMessageBox, QTabWidget)
 from qtpy import QtCore
 from qtpy.QtCore import Signal, QThread, QObject
 
 
-"""Defines: GEMspaWidget, GEMspaWorker, GEMspaLogWidget, GEMspaPlugin"""
-
-
-class GEMspaWidget(QWidget):
-    """Definition of a GEMspa napari widget
-
-    This interface implements three methods
-    - show_error: to display a user input error
-    - check_inputs (abstract): to check all the user input from the plugin widget
-    - state (abstract): to get the plugin widget state: the user inputs values set in the widget
-
-    """
-
-    enable = Signal(bool)
-
-    def __init__(self):
-        super().__init__()
-
-    @staticmethod
-    def show_error(message):
-        """Display an error message in a QMessage box
-
-        Parameters
-        ----------
-        message: str
-            Error message
-
-        """
-        msg = QMessageBox()
-        msg.setIcon(QMessageBox.Critical)
-
-        msg.setText(message)
-        msg.setWindowTitle("GEMspa error")
-        msg.exec_()
-
-    def check_inputs(self):
-        """Check the user input in this widget
-
-        Returns:
-            True if no error, False if at least one input contains an error.
-
-        """
-        raise NotImplementedError()
-
-    def state(self):
-        """Return the current state of the widget
-
-        The state in input values displayed in the widget.
-
-        Returns:
-            dict: a dictionary containing the widget inputs
-
-        """
-        raise NotImplementedError()
-
-
-class GEMspaWorker(QObject):
-    """Definition of a GEMspaWorker
-
-    The worker runs the calculation (using the run method) using the user inputs
-    from the plugin widget interface (GEMspaWidget)
-
-    """
-
-    # Worker can send these signals
-    finished = Signal()
-    log = Signal(str)
-
-    def __init__(self, napari_viewer, widget):
-        super().__init__()
-        self.viewer = napari_viewer
-        self.widget = widget
-
-    def state(self):
-        """Get the states from the GEMSpaWidget"""
-        self.widget.state()
-
-    def run(self):
-        """Exec the data processing"""
-        raise NotImplementedError()
-
-
-class GEMspaLogWidget(QWidget):
-    """Widget to log the GEMspa plugin messages in the graphical interface"""
-    def __init__(self):
-        super().__init__()
-
-        layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        self.log_area = QTextEdit()
-        layout.addWidget(self.log_area)
-        self.setLayout(layout)
-
-    def add_log(self, value: str):
-        """Callback to add a new message in the log area"""
-        self.log_area.append(value)
-
-    def clear_log(self):
-        """Callback to clear all the log area"""
-        self.log_area.clear()
+"""Defines: GEMspaPlugin"""
 
 
 class GEMspaPlugin(QWidget):
+
     """Definition of a GEMspa napari plugin
 
     Parameters
@@ -113,13 +17,6 @@ class GEMspaPlugin(QWidget):
     napari_viewer: Viewer
         Napari viewer
 
-    Attributes
-    ----------
-    worker: GEMspaWorker
-        Instance of the plugin worker
-
-    widget: GEMspaInputWidget
-        Instance of the plugin widget
     """
 
     def __init__(self, napari_viewer):
@@ -127,14 +24,25 @@ class GEMspaPlugin(QWidget):
         self.viewer = napari_viewer
 
         # thread
-        self.title = 'Default plugin'
-        self.worker = None
-        self.widget = None
-        self.fill_widget_resize = 1
-        self.thread = QThread()
+        self.title = 'GEMspa plugin'
 
-        # GUI
+        # Subwidget 1 : Localization
+        self.locate_widget = GEMspaLocateWidget(self.viewer)
+        self.locate_worker = GEMspaLocateWorker(self.viewer, self.locate_widget)
+        self.locate_thread = QThread()
+
+        self.link_worker = None
+        self.link_widget = None
+        self.link_thread = QThread()
+
+        self.analyze_worker = None
+        self.analyze_widget = None
+        self.analyze_thread = QThread()
+
+        # Run button will execute functionality for the currently active tab
         self.run_btn = None
+
+        # Log widget displays all outputs
         self.log_widget = GEMspaLogWidget()
 
     def init_ui(self):
@@ -149,8 +57,18 @@ class GEMspaPlugin(QWidget):
         title_label.setAlignment(QtCore.Qt.AlignCenter)
         layout.addWidget(title_label)
 
-        # The main widget
-        layout.addWidget(self.widget)
+        # Tab widget for switching between subwidgets
+        main_tab = QTabWidget()
+        layout.addWidget(main_tab)
+
+        # Subwidget 1 : Localization
+        main_tab.addTab(self.locate_widget, "Locate features")
+
+        # Subwidget 2 : Link features
+        main_tab.addTab(self.link_widget, "Link features")
+
+        # Subwidget 3 : Analysis
+        main_tab.addTab(self.analyze_widget, "Analysis")
 
         # Run button
         self.run_btn = QPushButton('Run')
@@ -160,37 +78,51 @@ class GEMspaPlugin(QWidget):
         # Log widget
         layout.addWidget(self.log_widget)
 
-        # not sure what this is
-        layout.addWidget(QWidget(), self.fill_widget_resize, QtCore.Qt.AlignTop)
-
         self.setLayout(layout)
 
         # Connects:
 
         # move QObject to thread (a QThread() object)
-        self.worker.moveToThread(self.thread)
-
         # when thread sends started signal, worker.run is executed
-        self.thread.started.connect(self.worker.run)
+        self.locate_worker.moveToThread(self.locate_thread)
+        self.locate_thread.started.connect(self.locate_worker.run)
 
-        # when worker sends log signal (str), log_widget.add_log is executed
-        self.worker.log.connect(self.log_widget.add_log)
+        self.link_worker.moveToThread(self.link_thread)
+        self.link_thread.started.connect(self.link_worker.run)
 
-        # when worker sends finished signal, thread.quit is executed and set_outputs is executed
-        self.worker.finished.connect(self.thread.quit)
-        self.worker.finished.connect(self.set_outputs)
+        self.analyze_worker.moveToThread(self.analyze_thread)
+        self.analyze_thread.started.connect(self.analyze_worker.run)
+
+        # when any worker sends log signal (str), log_widget.add_log is executed
+        self.locate_worker.log.connect(self.log_widget.add_log)
+        self.link_worker.log.connect(self.log_widget.add_log)
+        self.analyze_worker.log.connect(self.log_widget.add_log)
+
+        # when worker sends finished signal, thread.quit is executed
+        self.locate_worker.finished.connect(self.locate_thread.quit)
+        self.link_worker.finished.connect(self.link_thread.quit)
+        self.analyze_worker.finished.connect(self.analyze_thread.quit)
+
+        # TODO: move this functionality to the worker
+        # self.locate_worker.finished.connect(self.set_outputs)
+        # self.link_worker.finished.connect(self.set_outputs)
+        # self.analyze_worker.finished.connect(self.set_outputs)
 
     def run(self):
         """Start the worker in a new thread"""
+
+        # TODO: check what tab is currently selected, then, check inputs and start thread
         if self.widget.check_inputs():
             self.thread.start()
 
     def set_enable(self, mode: bool):
         """Callback called to disable the run button when the inputs layers are not available"""
+
+        # TODO: check what tab is currently selected, then, check needed layers are available and if not, disable 
         self.run_btn.setEnabled(mode)
 
-    def set_outputs(self):
-        """Call the worker set_outputs method to set the plugin outputs to napari layers"""
-        self.worker.set_outputs()
+    # def set_outputs(self):
+    #     """Call the worker set_outputs method to set the plugin outputs to napari layers"""
+    #     self.worker.set_outputs()
 
 

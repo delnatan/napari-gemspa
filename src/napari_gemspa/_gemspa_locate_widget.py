@@ -1,11 +1,11 @@
-from ._gemspa_plugin import GEMspaPlugin, GEMspaWidget, GEMspaWorker
+from ._gemspa_widget import GEMspaWidget, GEMspaWorker
 from ._gemspa_data_views import GEMspaTableWindow, GEMspaPlottingWindow
 import napari
 import trackpy as tp
 from qtpy.QtWidgets import (QGridLayout, QLabel, QLineEdit, QCheckBox, QComboBox)
 
 
-"""Defines: GEMspaLocateWidget, GEMspaLocateWorker, GEMspaLocatePlugin"""
+"""Defines: GEMspaLocateWidget, GEMspaLocateWorker"""
 
 
 class GEMspaLocateWidget(GEMspaWidget):
