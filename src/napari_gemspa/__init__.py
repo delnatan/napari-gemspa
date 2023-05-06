@@ -5,7 +5,7 @@ from ._sample_data import make_sample_data
 from ._widget import locate_widget, link_widget, filter_link_widget, analyze_traj_widget
 from ._writer import write_multiple, write_single_image
 
-from ._gemspa_locate_plugin import GEMspaLocatePlugin
+from ._gemspa_plugin import GEMspaPlugin
 
 __all__ = (
     "napari_get_reader",
@@ -16,5 +16,5 @@ __all__ = (
     "link_widget",
     "filter_link_widget",
     "analyze_traj_widget",
-    "GEMspaLocatePlugin"
+    "GEMspaPlugin"
 )

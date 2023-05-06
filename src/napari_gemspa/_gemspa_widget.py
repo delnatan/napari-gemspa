@@ -1,24 +1,45 @@
 from qtpy.QtWidgets import (QWidget, QVBoxLayout, QTextEdit, QMessageBox)
-from qtpy.QtCore import Signal, QObject
+from qtpy.QtCore import Signal, Slot, QObject, QThread
 
 
 """Defines: GEMspaWidget, GEMspaWorker, GEMspaLogWidget"""
 
 
-class GEMspaWidget(QWidget):
-    """Definition of a GEMspa napari widget
+class GEMspaWorker(QObject):
+    """Definition of a GEMspaWorker
 
-    This interface implements three methods
-    - show_error: to display a user input error
-    - check_inputs (abstract): to check all the user input from the plugin widget
-    - state (abstract): to get the plugin widget state: the user inputs values set in the widget
+    Receives and Sends input/output as a dictionary
 
     """
 
-    enable = Signal(bool)
+    # Worker can send these signals
+    finished = Signal()
+    update_data = Signal(dict)
+    log = Signal(str)
 
     def __init__(self):
         super().__init__()
+
+    @Slot(dict)
+    def run(self, state):
+        """Exec the data processing"""
+
+        self.finished.emit()
+
+
+class GEMspaWidget(QWidget):
+    """Definition of a GEMspa napari widget
+
+    """
+
+    def __init__(self, napari_viewer):
+        super().__init__()
+
+        self.viewer = napari_viewer
+        self.thread = QThread()
+
+        self.worker = GEMspaWorker()
+        self.state = dict()
 
     @staticmethod
     def show_error(message):
@@ -37,6 +58,23 @@ class GEMspaWidget(QWidget):
         msg.setWindowTitle("GEMspa error")
         msg.exec_()
 
+    def start_task(self):
+
+        self.worker.moveToThread(self.thread)
+
+        # when thread is started, worker is run with the current state of the widget as input
+        self.thread.started.connect(lambda: self.worker.run(self.state()))
+
+        # when the worker sends update_data signal, update_data of the widget will execute to update the GUI
+        self.worker.update_data.connect(self.update_data)
+
+        # Cleanup (as chatGPT suggested)
+        self.worker.finished.connect(self.thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.thread.finished.connect(self.thread.deleteLater)
+
+        self.thread.start()
+
     def check_inputs(self):
         """Check the user input in this widget
 
@@ -44,44 +82,22 @@ class GEMspaWidget(QWidget):
             True if no error, False if at least one input contains an error.
 
         """
-        raise NotImplementedError()
+
+        raise NotImplementedError
 
     def state(self):
         """Return the current state of the widget
 
-        The state in input values displayed in the widget.
+        """
 
-        Returns:
-            dict: a dictionary containing the widget inputs
+        return NotImplementedError
+
+    def update_data(self, out_data):
+        """Update the data output from the worker to the GUI
 
         """
-        raise NotImplementedError()
 
-
-class GEMspaWorker(QObject):
-    """Definition of a GEMspaWorker
-
-    The worker runs the calculation (using the run method) using the user inputs
-    from the plugin widget interface (GEMspaWidget)
-
-    """
-
-    # Worker can send these signals
-    finished = Signal()
-    log = Signal(str)
-
-    def __init__(self, napari_viewer, widget):
-        super().__init__()
-        self.viewer = napari_viewer
-        self.widget = widget
-
-    def state(self):
-        """Get the states from the GEMSpaWidget"""
-        self.widget.state()
-
-    def run(self):
-        """Exec the data processing"""
-        raise NotImplementedError()
+        return NotImplementedError
 
 
 class GEMspaLogWidget(QWidget):

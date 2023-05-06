@@ -27,7 +27,7 @@ contributions:
       python_name: napari_gemspa._widget:analyze_traj_widget
       title: Make analyze traj widget
     - id: napari-gemspa.make_locateplugin
-      python_name: napari_gemspa._gemspa_locate_plugin:GEMspaLocatePlugin
+      python_name: napari_gemspa._gemspa_plugin:GEMspaPlugin
       title: Make locate plugin
   readers:
     - command: napari-gemspa.get_reader
