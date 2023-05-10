@@ -14,21 +14,21 @@ contributions:
     - id: napari-gemspa.make_sample_data
       python_name: napari_gemspa._sample_data:make_sample_data
       title: Load sample data from GEMspa
-    - id: napari-gemspa.make_locate_widget
-      python_name: napari_gemspa._widget:locate_widget
-      title: Make locate widget
-    - id: napari-gemspa.make_link_widget
-      python_name: napari_gemspa._widget:link_widget
-      title: Make link widget
-    - id: napari-gemspa.make_filter_link_widget
-      python_name: napari_gemspa._widget:filter_link_widget
-      title: Make filter link widget
-    - id: napari-gemspa.make_analyze_traj_widget
-      python_name: napari_gemspa._widget:analyze_traj_widget
-      title: Make analyze traj widget
-    - id: napari-gemspa.make_locateplugin
+#    - id: napari-gemspa.make_locate_widget
+#      python_name: napari_gemspa._widget:locate_widget
+#      title: Make locate widget
+#    - id: napari-gemspa.make_link_widget
+#      python_name: napari_gemspa._widget:link_widget
+#      title: Make link widget
+#    - id: napari-gemspa.make_filter_link_widget
+#      python_name: napari_gemspa._widget:filter_link_widget
+#      title: Make filter link widget
+#    - id: napari-gemspa.make_analyze_traj_widget
+#      python_name: napari_gemspa._widget:analyze_traj_widget
+#      title: Make analyze traj widget
+    - id: napari-gemspa.make_gemspa_plugin
       python_name: napari_gemspa._gemspa_plugin:GEMspaPlugin
-      title: Make locate plugin
+      title: Make GEMspa plugin
   readers:
     - command: napari-gemspa.get_reader
       accepts_directories: false
@@ -45,13 +45,13 @@ contributions:
       display_name: GEMspa
       key: unique_id.1
   widgets:
-    - command: napari-gemspa.make_locate_widget
-      display_name: Locate features
-    - command: napari-gemspa.make_link_widget
-      display_name: Link features
-    - command: napari-gemspa.make_filter_link_widget
-      display_name: Filter links
-    - command: napari-gemspa.make_analyze_traj_widget
-      display_name: Analyze trajectories
-    - command: napari-gemspa.make_locateplugin
-      display_name: Locate features (new)
+#    - command: napari-gemspa.make_locate_widget
+#      display_name: Locate features
+#    - command: napari-gemspa.make_link_widget
+#      display_name: Link features
+#    - command: napari-gemspa.make_filter_link_widget
+#      display_name: Filter links
+#    - command: napari-gemspa.make_analyze_traj_widget
+#      display_name: Analyze trajectories
+    - command: napari-gemspa.make_gemspa_plugin
+      display_name: GEMspa

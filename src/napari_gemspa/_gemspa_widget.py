@@ -1,5 +1,6 @@
 from qtpy.QtWidgets import (QWidget, QVBoxLayout, QTextEdit, QMessageBox)
-from qtpy.QtCore import Signal, Slot, QObject, QThread
+from qtpy.QtCore import Signal, QObject, QThread
+from ._gemspa_data_views import GEMspaTableWindow, GEMspaPlottingWindow
 
 
 """Defines: GEMspaWidget, GEMspaWorker, GEMspaLogWidget"""
@@ -20,8 +21,7 @@ class GEMspaWorker(QObject):
     def __init__(self):
         super().__init__()
 
-    @Slot(dict)
-    def run(self, state):
+    def run(self):
         """Exec the data processing"""
 
         self.finished.emit()
@@ -32,14 +32,20 @@ class GEMspaWidget(QWidget):
 
     """
 
+    name = 'GEMspaWidget'
+
     def __init__(self, napari_viewer):
         super().__init__()
 
         self.viewer = napari_viewer
-        self.thread = QThread()
+        self.thread = None
+        self.worker = None
 
-        self.worker = GEMspaWorker()
-        self.state = dict()
+        # viewers for feature properties
+        self.properties_viewers = []
+
+        # viewers for the graphical output
+        self.plots_viewers = []
 
     @staticmethod
     def show_error(message):
@@ -58,12 +64,31 @@ class GEMspaWidget(QWidget):
         msg.setWindowTitle("GEMspa error")
         msg.exec_()
 
-    def start_task(self):
+    def _new_plots_viewer(self, title='Plot view'):
+        i = len(self.plots_viewers)
+        self.plots_viewers.append(GEMspaPlottingWindow(self.viewer))
+        self.plots_viewers[i].setWindowTitle(title)
+        return self.plots_viewers[i]
 
+    def _new_properties_viewer(self, title='Table view'):
+        i = len(self.properties_viewers)
+        self.properties_viewers.append(GEMspaTableWindow(self.viewer))
+        self.properties_viewers[i].setWindowTitle(title)
+        return self.properties_viewers[i]
+
+    def start_task(self, layer_name, log_widget):
+
+        # Perform startup tasks and start thread: worker must be initialized before this function is called
+
+        # connect worker log signal to the GEMspaLogWidget all_log method
+        self.worker.log.connect(log_widget.add_log)
+
+        # Thread for this worker
+        self.thread = QThread()
         self.worker.moveToThread(self.thread)
 
         # when thread is started, worker is run with the current state of the widget as input
-        self.thread.started.connect(lambda: self.worker.run(self.state()))
+        self.thread.started.connect(lambda: self.worker.run(self.state(layer_name)))
 
         # when the worker sends update_data signal, update_data of the widget will execute to update the GUI
         self.worker.update_data.connect(self.update_data)
@@ -74,30 +99,6 @@ class GEMspaWidget(QWidget):
         self.thread.finished.connect(self.thread.deleteLater)
 
         self.thread.start()
-
-    def check_inputs(self):
-        """Check the user input in this widget
-
-        Returns:
-            True if no error, False if at least one input contains an error.
-
-        """
-
-        raise NotImplementedError
-
-    def state(self):
-        """Return the current state of the widget
-
-        """
-
-        return NotImplementedError
-
-    def update_data(self, out_data):
-        """Update the data output from the worker to the GUI
-
-        """
-
-        return NotImplementedError
 
 
 class GEMspaLogWidget(QWidget):

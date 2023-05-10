@@ -1,4 +1,4 @@
-
+import napari
 import pandas as pd
 import numpy as np
 from qtpy.QtCore import Qt, QCoreApplication, QRect
@@ -20,7 +20,6 @@ class GEMspaPlottingWindow(QMainWindow):
         super().__init__(*args, **kwargs)
 
         self.viewer = napari_viewer
-        self.layer_name = ''
 
         self.centralWidget = QWidget()
         self.setCentralWidget(self.centralWidget)
@@ -34,43 +33,109 @@ class GEMspaPlottingWindow(QMainWindow):
         self.verticalLayout.addWidget(NavigationToolbar(self.canvas, self))
         self.verticalLayout.addWidget(self.canvas)
 
-    def reload(self):
-        """Reload the properties from the layer to the figure"""
+    @staticmethod
+    def _fill_table(t, df):
+        t.clearContents()
+        t.setColumnCount(len(df.columns))
+        t.setHorizontalHeaderLabels(df.columns)
+        t.setRowCount(len(df))
 
-        data = self.viewer.layers[self.layer_name].data
-        properties = self.viewer.layers[self.layer_name].properties
-        type = self.viewer.layers[self.layer_name].as_layer_data_tuple()[2]  # TODO: is there a better way to do this?
+        for i, row in enumerate(df.iterrows()):
+            for j, col in enumerate(df.columns):
+                t.setItem(i, j, QTableWidgetItem(str(row[1][col])))
 
-        if type == 'points':
-            if data.shape[1] == 3:
-                y_index = 1
-                x_index = 2
-                # headers = ['t', 'y', 'x']
-            elif data.shape[1] == 4:
-                y_index = 2
-                x_index = 3
-                # headers = ['t', 'z', 'y', 'x']
+    def plot_locate_results(self, df):
 
-            # TODO: implement for other types (only for Points layer right now)
+        self.canvas.figure.clear()
+        axs = self.canvas.figure.subplots(1, 3)
+
+        # Show Mass histogram
+        axs[0].hist(df['mass'], bins=20)
+        axs[0].set(xlabel='mass', ylabel='count')
+        axs[0].set_title('mass')
+
+        # Show subpixel bias (histogram fractional part of x/y positions)
+        axs[1].hist(np.modf(df['x'])[0], bins=20)
+        axs[1].set(xlabel='x', ylabel='count')
+        axs[1].set_title('sub px bias (x)')
+
+        axs[2].hist(np.modf(df['y'])[0], bins=20)
+        axs[2].set(xlabel='y', ylabel='count')
+        axs[2].set_title('sub px bias (y)')
+
+        self.canvas.figure.tight_layout()
+
+    def plot_link_results(self, df):
+
+        self.canvas.figure.clear()
+        axs = self.canvas.figure.subplots(1, 2)
+
+        # Show plot of mass vs. size
+        mean_t = df.groupby('particle').mean()
+
+        axs[0].plot(mean_t['mass'], mean_t['size'], 'ko', alpha=0.1)
+        axs[0].set(xlabel='mass', ylabel='size')
+        axs[0].set_title('mass vs size')
+
+        axs[1].plot(mean_t['mass'], mean_t['ecc'], 'ko', alpha=0.3)
+        axs[1].set(xlabel='mass', ylabel='eccentricity (0=circular)')
+        axs[1].set_title('mass vs eccentricity')
+
+        self.canvas.figure.tight_layout()
+
+    def plot_analyze_results(self, plot_data):
+
+        summary_table = QTableWidget()
+        self.verticalLayout.addWidget(summary_table)
+
+        if 'ens_fit_results' in plot_data and 'ens_msd' in plot_data:
+
+            msd = plot_data['ens_msd']
+            df = plot_data['ens_fit_results']
+            df = df.round({'D': 4, 'E': 4, 'r_sq (lin)': 2, 'K': 4, 'a': 4, 'r_sq (log)': 2})
+
+            # Table of data
+            self._fill_table(summary_table, df)
+
+            D = df.iloc[0]['D']
+            alpha = df.iloc[0]['a']
+
+            # Ensemble MSD plot
             self.canvas.figure.clear()
-            self._axs = self.canvas.figure.subplots(1, 3)
+            axs = self.canvas.figure.subplots(1, 2)
+            axs[0].scatter(msd[:, 0], msd[:, 1])
+            axs[1].scatter(msd[:, 0], msd[:, 1])
+            axs[1].set_xscale('log', base=10)
+            axs[1].set_yscale('log', base=10)
+            axs[0].set(xlabel=r'$\tau$ $(s)$', ylabel=r'$MSD$ ($\mu m^{2}$)')
+            axs[1].set(xlabel=r'$log_{10}$ $\tau$ $(s)$', ylabel=r'$log_{10}$ $MSD$ ($\mu m^{2}$)')
+            axs[0].set_title(f"ens-avg MSD (2d)\nD = {D} " + r"$\mu m^{2}$/s")
+            axs[1].set_title(f"ens-avg log-log MSD (2d)\n" + r"$\alpha$ = " + f"{alpha}")
 
-            # Show Mass histogram
-            self._axs[0].hist(properties['mass'], bins=20)
-            self._axs[0].set(xlabel='mass', ylabel='count')
-            self._axs[0].set_title('mass')
+        elif 'fit_results' in plot_data and 'msd' in plot_data:
 
-            # Show subpixel bias (histogram fractional part of x/y positions)
-            self._axs[1].hist(np.modf(data[:, x_index])[0], bins=20)
-            self._axs[1].set(xlabel='x', ylabel='count')
-            self._axs[1].set_title('sub px bias (x)')
+            msd = plot_data['msd']
+            df = plot_data['fit_results']
+            df = df.round({'D': 4, 'E': 4, 'r_sq (lin)': 2, 'K': 4, 'a': 4, 'r_sq (log)': 2})
 
-            self._axs[2].hist(np.modf(data[:, y_index])[0], bins=20)
-            self._axs[2].set(xlabel='y', ylabel='count')
-            self._axs[2].set_title('sub px bias (y)')
+            # Table of data
+            self._fill_table(summary_table, df)
 
-        elif type == 'tracks':
-            pass
+            D = df[df.dim == 'sum'].iloc[0]['D']
+            alpha = df[df.dim == 'sum'].iloc[0]['a']
+            track_id = int(df.iloc[0]['track_id'])
+
+            # Make plots (MSD of track, with fit line, linear and loglog scale)
+            self.canvas.figure.clear()
+            axs = self.canvas.figure.subplots(1, 2)
+            axs[0].scatter(msd[:, 0], msd[:, 1])
+            axs[1].scatter(msd[:, 0], msd[:, 1])
+            axs[1].set_xscale('log', base=10)
+            axs[1].set_yscale('log', base=10)
+            axs[0].set(xlabel=r'$\tau$ $(s)$', ylabel=r'$MSD$ ($\mu m^{2}$)')
+            axs[1].set(xlabel=r'$log_{10}$ $\tau$ $(s)$', ylabel=r'$log_{10}$ $MSD$ ($\mu m^{2}$)')
+            axs[0].set_title(f'track {track_id} MSD (2d)\nD = {D} ' + r'$\mu m^{2}$/s')
+            axs[1].set_title(f'track {track_id} log-log MSD (2d)\n' + r'$\alpha$ = ' + f'{alpha}')
 
         self.canvas.figure.tight_layout()
 
@@ -132,7 +197,6 @@ class GEMspaTableWindow(QMainWindow):
     def __init__(self, napari_viewer):
         super().__init__()
         self.viewer = napari_viewer
-        self.layer_name = ''
 
         self.setGeometry(QRect(100, 100, 600, 200))
 
@@ -210,42 +274,50 @@ class GEMspaTableWindow(QMainWindow):
         print(f"Saving {file_name}...")
         self.tableWidget.save_to_file(file_name[0])
 
-    def reload(self):
+    def reload_from_pandas(self, df):
+        """Fill the table with the data in a pandas data frame"""
+        self.tableWidget.clearContents()
+        self.tableWidget.setColumnCount(len(df.columns))
+        self.tableWidget.setHorizontalHeaderLabels(df.columns)
+        self.tableWidget.setRowCount(len(df))
+
+        for i, row in enumerate(df.iterrows()):
+            for j, col in enumerate(df.columns):
+                self.tableWidget.setItem(i, j, QTableWidgetItem(str(row[1][col])))
+
+    def reload_from_layer(self, layer_name):
         """Reload the properties from the layer to the table widget"""
 
-        data = self.viewer.layers[self.layer_name].data
-        properties = self.viewer.layers[self.layer_name].properties
-        type = self.viewer.layers[self.layer_name].as_layer_data_tuple()[2]  # TODO: is there a better way to do this?
-
-        if type == 'points':
-
-            # Assume layer is Points layer, TODO: add tracks layer
-            # Other layer types not supported
-
-            headers = []
+        data = self.viewer.layers[layer_name].data
+        properties = self.viewer.layers[layer_name].properties
+        headers = []
+        if isinstance(self.viewer.layers[layer_name], napari.layers.points.points.Points):
             if data.shape[1] == 3:
                 headers = ['t', 'y', 'x']
             elif data.shape[1] == 4:
                 headers = ['t', 'z', 'y', 'x']
 
-            for key in properties:
-                headers.append(key)
+        elif isinstance(self.viewer.layers[layer_name], napari.layers.tracks.tracks.Tracks):
+            headers = ['track_id', 't', 'z', 'y', 'x']
 
-            self.tableWidget.setColumnCount(len(headers))
-            self.tableWidget.setHorizontalHeaderLabels(headers)
-            self.tableWidget.setRowCount(data.shape[0])
+            # Avoid repeated column: napari adds track_id column to properties
+            del properties['track_id']
 
-            for line in range(data.shape[0]):
-                for col in range(data.shape[1]):
-                    self.tableWidget.setItem(line, col, QTableWidgetItem(str(data[line, col])))
+        for key in properties:
+            headers.append(key)
 
-            # properties
-            col = data.shape[1]
-            for key in properties:
-                prop = properties[key]
-                for line in range(len(prop)):
-                    self.tableWidget.setItem(line, col, QTableWidgetItem(str(prop[line])))
-                col += 1
+        self.tableWidget.setColumnCount(len(headers))
+        self.tableWidget.setHorizontalHeaderLabels(headers)
+        self.tableWidget.setRowCount(data.shape[0])
 
-        elif type == 'tracks':
-            pass
+        for line in range(data.shape[0]):
+            for col in range(data.shape[1]):
+                self.tableWidget.setItem(line, col, QTableWidgetItem(str(data[line, col])))
+
+        # properties
+        col = data.shape[1]
+        for key in properties:
+            prop = properties[key]
+            for line in range(len(prop)):
+                self.tableWidget.setItem(line, col, QTableWidgetItem(str(prop[line])))
+            col += 1

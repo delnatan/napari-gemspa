@@ -285,7 +285,7 @@ def analyze_traj_widget(viewer: Viewer,
 
             # Ensemble average eff-D (linear) and alpha (log-log)
             msds = tracks.msd_all_tracks()
-            ens_msds, n_ens_tracks = tracks.ensemble_avg_msd()
+            ens_msds, n_ens_tracks = tracks.ensemble_avg_msd(min_len=min_len_fit)
 
             # fit ensemble MSD, get D and alpha
             D, E, r_squared1 = tracks.fit_msd_linear(t=ens_msds[1:, 0], msd=ens_msds[1:, 4], dim=2,
