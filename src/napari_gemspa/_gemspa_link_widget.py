@@ -1,8 +1,9 @@
 from ._gemspa_widget import GEMspaWidget, GEMspaWorker
 import pandas as pd
 import trackpy as tp
-from qtpy.QtWidgets import (QGridLayout, QLabel, QLineEdit, QCheckBox, QComboBox)
+from qtpy.QtWidgets import (QWidget, QGridLayout, QLabel, QLineEdit, QCheckBox, QComboBox, QVBoxLayout)
 from qtpy.QtCore import Slot
+from qtpy import QtCore
 
 
 """Defines: GEMspaLinkWidget, GEMspaLinkWorker"""
@@ -23,8 +24,12 @@ class GEMspaLinkWorker(GEMspaWorker):
         input_params = state['inputs']
         state_params = state['parameters']
 
-        link_range = state_params['link_range']
+        search_range = state_params['search_range']
+
         memory = state_params['memory']
+        if memory is None:
+            memory = 0
+
         min_frames = state_params['min_frames']
 
         points_layer_data = input_params['points_layer_data']
@@ -44,12 +49,13 @@ class GEMspaLinkWorker(GEMspaWorker):
             tp.quiet()  # trackpy to quiet mode
 
             # perform linking
-            t = tp.link(f, search_range=link_range, memory=memory)
+            t = tp.link(f, search_range=search_range, memory=memory)
             self.log.emit(f"Number of particles: {t['particle'].nunique()}")
 
             # Filter spurious trajectories
-            t = tp.filter_stubs(t, threshold=min_frames)
-            self.log.emit(f"After filter_stubs, number of particles: {t['particle'].nunique()}")
+            if min_frames is not None and min_frames > 1:
+                t = tp.filter_stubs(t, threshold=min_frames)
+                self.log.emit(f"After filter for Min frames, number of particles: {t['particle'].nunique()}")
 
             # emit the output data after sorting by track_id (particle) and frame (needed for tracks layer)
             t.index.name = 'index'  # pandas complains when index name and column name are the same
@@ -73,29 +79,32 @@ class GEMspaLinkWidget(GEMspaWidget):
     def __init__(self, napari_viewer):
         super().__init__(napari_viewer)
 
-        self._link_range_value = None
-        self._memory_value = None
-        self._min_frames_value = None
+        self._input_values = {'Link range': QLineEdit('5'),
+                              'Memory': QLineEdit('0'),
+                              'Min frames': QLineEdit('3')
+                              }
+
+        # Link range does not have a default value in trackpy and must be input by the user
+        self._required_inputs = ['Link range', ]
 
         self.init_ui()
 
     def init_ui(self):
 
+        layout = QVBoxLayout()
+
         # Set up the input GUI items
-        self._link_range_value = QLineEdit('5')
-        self._memory_value = QLineEdit('0')
-        self._min_frames_value = QLineEdit('3')
+        grid_layout = QGridLayout()
+        grid_layout.setContentsMargins(0, 0, 0, 0)
 
-        layout = QGridLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
+        i = 0
+        for key in self._input_values.keys():
+            grid_layout.addWidget(QLabel(key), i, 0)
+            grid_layout.addWidget(self._input_values[key], i, 1)
+            i += 1
 
-        layout.addWidget(QLabel('Link range'), 0, 0)
-        layout.addWidget(self._link_range_value, 0, 1)
-        layout.addWidget(QLabel('Memory'), 1, 0)
-        layout.addWidget(self._memory_value, 1, 1)
-        layout.addWidget(QLabel('Min frames'), 2, 0)
-        layout.addWidget(self._min_frames_value, 2, 1)
-
+        layout.addLayout(grid_layout)
+        layout.addStretch()
         self.setLayout(layout)
 
     def start_task(self, layer_name, log_widget):
@@ -103,40 +112,15 @@ class GEMspaLinkWidget(GEMspaWidget):
         self.worker = GEMspaLinkWorker()
         super().start_task(layer_name, log_widget)
 
-    def check_inputs(self):
-
-        # Link range
-        try:
-            _ = float(self._link_range_value.text())
-        except ValueError as err:
-            self.show_error(f"Link range input must be a number")
-            return False
-
-        # Memory
-        try:
-            _ = int(self._memory_value.text())
-        except ValueError as err:
-            self.show_error(f"Memory input must be an integer")
-            return False
-
-        # Min frames
-        try:
-            _ = int(self._min_frames_value.text())
-        except ValueError as err:
-            self.show_error(f"Min frames input must be an integer")
-            return False
-
-        return True
-
     def state(self, layer_name) -> dict:
         return {'name': self.name,
                 'inputs': {'points_layer_name': layer_name,
                            'points_layer_data': self.viewer.layers[layer_name].data,
                            'points_layer_props': self.viewer.layers[layer_name].properties
                            },
-                'parameters': {'link_range': float(self._link_range_value.text()),
-                               'memory': int(self._memory_value.text()),
-                               'min_frames': int(self._min_frames_value.text()),
+                'parameters': {'search_range': self._convert_to_float(self._input_values['Link range'].text()),
+                               'memory': self._convert_to_int(self._input_values['Memory'].text()),
+                               'min_frames': self._convert_to_int(self._input_values['Min frames'].text()),
                                },
                 }
 

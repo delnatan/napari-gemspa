@@ -2,7 +2,7 @@ from ._gemspa_widget import GEMspaWidget, GEMspaWorker
 import pandas as pd
 import numpy as np
 from gemspa_spt import ParticleTracks
-from qtpy.QtWidgets import (QGridLayout, QLabel, QLineEdit, QCheckBox)
+from qtpy.QtWidgets import (QGridLayout, QLabel, QLineEdit, QCheckBox, QVBoxLayout)
 from qtpy.QtCore import Slot
 
 
@@ -146,49 +146,45 @@ class GEMspaAnalyzeWidget(GEMspaWidget):
     def __init__(self, napari_viewer):
         super().__init__(napari_viewer)
 
-        self._batch_check = None
-        self._track_id_value = None
-        self._microns_per_pixel_value = None
-        self._time_lag_sec_value = None
-        self._min_len_fit_value = None
-        self._max_lagtime_fit_value = None
-        self._error_term_fit_check = None
+        self._batch_check = QCheckBox('Process all tracks')
+        self._error_term_fit_check = QCheckBox('Fit with error term')
 
+        self._input_values = {'Track id': QLineEdit(''),
+                              'Microns per px': QLineEdit('0.134'),
+                              'Time lag (sec)': QLineEdit('0.010'),
+                              'Min track len for fit (frames)': QLineEdit('11'),
+                              'Max time lag for fit (frames)': QLineEdit('10'),
+                              }
+        # These must be input by the user
+        self._required_inputs = ['Microns per px',
+                                 'Time lag (sec)',
+                                 'Min track len for fit (frames)',
+                                 'Max time lag for fit (frames)']
         self.init_ui()
 
     def init_ui(self):
 
         # Set up the input GUI items
-        self._batch_check = QCheckBox('Process all tracks')
-        self._track_id_value = QLineEdit('')
-        self._microns_per_pixel_value = QLineEdit('0.11')
-        self._time_lag_sec_value = QLineEdit('0.010')
-        self._min_len_fit_value = QLineEdit('11')
-        self._max_lagtime_fit_value = QLineEdit('10')
-        self._error_term_fit_check = QCheckBox('Fit with error term')
+        layout = QVBoxLayout()
 
-        layout = QGridLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
+        grid_layout = QGridLayout()
+        grid_layout.setContentsMargins(0, 0, 0, 0)
+        i = 0
 
-        layout.addWidget(self._batch_check, 0, 0, 1, 2)
+        self._batch_check.setChecked(True)
+        grid_layout.addWidget(self._batch_check, 0, 0, 1, 2)
+        i += 1
 
-        layout.addWidget(QLabel('Track id'), 1, 0)
-        layout.addWidget(self._track_id_value, 1, 1)
+        for key in self._input_values.keys():
+            grid_layout.addWidget(QLabel(key), i, 0)
+            grid_layout.addWidget(self._input_values[key], i, 1)
+            i += 1
 
-        layout.addWidget(QLabel('Microns per px'), 2, 0)
-        layout.addWidget(self._microns_per_pixel_value, 2, 1)
+        grid_layout.addWidget(self._error_term_fit_check, i, 0, 1, 2)
+        i += 1
 
-        layout.addWidget(QLabel('Time lag (s)'), 3, 0)
-        layout.addWidget(self._time_lag_sec_value, 3, 1)
-
-        layout.addWidget(QLabel('Min. track len (fit)'), 4, 0)
-        layout.addWidget(self._min_len_fit_value, 4, 1)
-
-        layout.addWidget(QLabel('Max. lag time (fit)'), 5, 0)
-        layout.addWidget(self._max_lagtime_fit_value, 5, 1)
-
-        layout.addWidget(self._error_term_fit_check, 6, 0, 1, 2)
-
+        layout.addLayout(grid_layout)
+        layout.addStretch()
         self.setLayout(layout)
 
     def start_task(self, layer_name, log_widget):
@@ -197,62 +193,45 @@ class GEMspaAnalyzeWidget(GEMspaWidget):
         super().start_task(layer_name, log_widget)
 
     def check_inputs(self):
+        # Special case for track id, it is required if batch is not checked
+        keys = list(self._input_values.keys())
+        required_keys = self._required_inputs[:]
+        if self._batch_check.isChecked():
+            # ignore track id completely
+            keys.remove('Track id')
+        else:
+            # it is required, if batch is not checked
+            required_keys.append('Track id')
 
-        if not self._batch_check.isChecked():
-            # track id
-            try:
-                _ = int(self._track_id_value.text())
-            except ValueError as err:
-                self.show_error(f"Track id input must be an integer")
-                return False
-
-        # Microns per px
-        try:
-            _ = float(self._microns_per_pixel_value.text())
-        except ValueError as err:
-            self.show_error(f"Microns per pixel input must be a number")
-            return False
-
-        # Time lag (s)
-        try:
-            _ = float(self._time_lag_sec_value.text())
-        except ValueError as err:
-            self.show_error(f"Time lag input must be a number")
-            return False
-
-        # Min len (fit)
-        try:
-            _ = int(self._min_len_fit_value.text())
-        except ValueError as err:
-            self.show_error(f"Min len (fit) input must be an integer")
-            return False
-
-        # Max lag (fit)
-        try:
-            _ = int(self._max_lagtime_fit_value.text())
-        except ValueError as err:
-            self.show_error(f"Max lag time (fit) must be an integer")
-            return False
-
-        return True
+        valid = True
+        for key in keys:
+            text = self._input_values[key].text()
+            if key in required_keys or text:
+                # if input is not blank, check it is a number
+                try:
+                    _ = float(text)
+                except ValueError:
+                    self.show_error(f"{key} input must be a number")
+                    valid = False
+        return valid
 
     def state(self, layer_name) -> dict:
         if self._batch_check.isChecked():
-            track_id = 0
+            track_id = None
         else:
-            track_id = int(self._track_id_value.text())
+            track_id = self._convert_to_int(self._input_values['Track id'].text())
 
         return {'name': self.name,
                 'inputs': {'tracks_layer_name': layer_name,
                            'tracks_layer_data': self.viewer.layers[layer_name].data,
                            'tracks_layer_props': self.viewer.layers[layer_name].properties
                            },
-                'parameters': {'batch': self._batch_check.isChecked(),
-                               'track_id': track_id,
-                               'microns_per_pixel': float(self._microns_per_pixel_value.text()),
-                               'time_lag_sec': float(self._time_lag_sec_value.text()),
-                               'min_len_fit': int(self._min_len_fit_value.text()),
-                               'max_lagtime_fit': int(self._max_lagtime_fit_value.text()),
+                'parameters': {'track_id': track_id,
+                               'microns_per_pixel': self._convert_to_float(self._input_values['Microns per px'].text()),
+                               'time_lag_sec': self._convert_to_float(self._input_values['Time lag (s)'].text()),
+                               'min_len_fit': self._convert_to_int(self._input_values['Min track len for fit (frames)'].text()),
+                               'max_lagtime_fit': self._convert_to_int(self._input_values['Max time lag for fit (frames)'].text()),
+                               'batch': self._batch_check.isChecked(),
                                'error_term_fit': self._error_term_fit_check.isChecked()
                                },
                 }
@@ -290,9 +269,5 @@ class GEMspaAnalyzeWidget(GEMspaWidget):
             plots_viewer.show()
 
 
-# Plot of all tracks on static image (all time lags)
-# 
-# When selecting a particular track, show it’s track on a plot as well as the MSDs
-#
-# Add step size and each angle to the tracks layer data
+
 

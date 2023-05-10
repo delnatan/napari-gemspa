@@ -47,6 +47,24 @@ class GEMspaWidget(QWidget):
         # viewers for the graphical output
         self.plots_viewers = []
 
+        self._input_values = {}
+        self._required_inputs = []
+
+    def closeEvent(self, event):
+        self._delete_viewers
+        event.accept()  # let the window close
+
+    def _delete_viewers(self):
+        while self.plots_viewers:
+            viewer = self.plots_viewers.pop()
+            viewer.close()
+            viewer.deleteLater()
+
+        while self.properties_viewers:
+            viewer = self.properties_viewers.pop()
+            viewer.close()
+            viewer.deleteLater()
+
     @staticmethod
     def show_error(message):
         """Display an error message in a QMessage box
@@ -63,6 +81,20 @@ class GEMspaWidget(QWidget):
         msg.setText(message)
         msg.setWindowTitle("GEMspa error")
         msg.exec_()
+
+    @staticmethod
+    def _convert_to_float(value):
+        if value:
+            return float(value)
+        else:
+            return None
+
+    @staticmethod
+    def _convert_to_int(value):
+        if value:
+            return int(value)
+        else:
+            return None
 
     def _new_plots_viewer(self, title='Plot view'):
         i = len(self.plots_viewers)
@@ -99,6 +131,20 @@ class GEMspaWidget(QWidget):
         self.thread.finished.connect(self.thread.deleteLater)
 
         self.thread.start()
+
+    def check_inputs(self):
+        valid = True
+        for key in self._input_values.keys():
+            text = self._input_values[key].text()
+            if key in self._required_inputs or text:
+                # if input is not blank, check it is a number
+                # except for Diameter, it cannot be blank
+                try:
+                    _ = float(text)
+                except ValueError:
+                    self.show_error(f"{key} input must be a number")
+                    valid = False
+        return valid
 
 
 class GEMspaLogWidget(QWidget):
