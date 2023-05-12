@@ -39,12 +39,7 @@ class GEMspaLinkWorker(GEMspaWorker):
         if len(points_layer_data.shape) > 1 and points_layer_data.shape[1] >= 3:
 
             # Make trackpy table from layer data
-            f = pd.DataFrame()
-            f['y'] = points_layer_data[:, 1]
-            f['x'] = points_layer_data[:, 2]
-            for col in points_layer_props.keys():
-                f[col] = points_layer_props[col]
-            f['frame'] = points_layer_data[:, 0]
+            f = self._make_trackpy_table("points", points_layer_data, points_layer_props)
 
             tp.quiet()  # trackpy to quiet mode
 
@@ -72,7 +67,7 @@ class GEMspaLinkWorker(GEMspaWorker):
 
 
 class GEMspaLinkWidget(GEMspaWidget):
-    """Widget for Locate Features plugin"""
+    """Widget for Link features plugin"""
 
     name = "GEMspaLinkWidget"
 
@@ -88,24 +83,6 @@ class GEMspaLinkWidget(GEMspaWidget):
         self._required_inputs = ['Link range', ]
 
         self.init_ui()
-
-    def init_ui(self):
-
-        layout = QVBoxLayout()
-
-        # Set up the input GUI items
-        grid_layout = QGridLayout()
-        grid_layout.setContentsMargins(0, 0, 0, 0)
-
-        i = 0
-        for key in self._input_values.keys():
-            grid_layout.addWidget(QLabel(key), i, 0)
-            grid_layout.addWidget(self._input_values[key], i, 1)
-            i += 1
-
-        layout.addLayout(grid_layout)
-        layout.addStretch()
-        self.setLayout(layout)
 
     def start_task(self, layer_name, log_widget):
         # initialize worker and start task
@@ -128,15 +105,10 @@ class GEMspaLinkWidget(GEMspaWidget):
         """Set the worker outputs to napari layers"""
 
         if 'df' in out_dict:
+
+            kwargs = {'name': 'Linked features'}
             df = out_dict['df']
-            data = df[['particle', 'frame', 'z', 'y', 'x']].to_numpy()
-
-            props = {}
-            for col in df.columns:
-                if col not in ['particle', 'frame', 'z', 'y', 'x']:
-                    props[col] = df[col].to_numpy()
-
-            layer = self.viewer.add_tracks(data, properties=props, name='Linked features')
+            layer = self._add_napari_layer("tracks", df, **kwargs)
 
             plots_viewer = self._new_plots_viewer(layer.name)
             properties_viewer = self._new_properties_viewer(layer.name)

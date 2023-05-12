@@ -70,7 +70,7 @@ class GEMspaPlottingWindow(QMainWindow):
         self.canvas.figure.clear()
         axs = self.canvas.figure.subplots(1, 2)
 
-        # Show plot of mass vs. size
+        # Show plots of mass vs. size and mass vs. eccentricity
         mean_t = df.groupby('particle').mean()
 
         axs[0].plot(mean_t['mass'], mean_t['size'], 'ko', alpha=0.1)
@@ -81,6 +81,15 @@ class GEMspaPlottingWindow(QMainWindow):
         axs[1].set(xlabel='mass', ylabel='eccentricity (0=circular)')
         axs[1].set_title('mass vs eccentricity')
 
+        self.canvas.figure.tight_layout()
+
+    def plot_rainbow_tracks(self, df):
+        self.canvas.figure.clear()
+        ax = self.canvas.figure.subplots(1, 1)
+
+        # Plot all tracks
+        for group in df.groupby('particle'):
+            ax.plot(group['x'], group['y'], '-')
         self.canvas.figure.tight_layout()
 
     def plot_analyze_results(self, plot_data):

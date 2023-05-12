@@ -1,6 +1,7 @@
 from ._gemspa_locate_widget import GEMspaLocateWidget
 from ._gemspa_link_widget import GEMspaLinkWidget
 from ._gemspa_analyze_widget import GEMspaAnalyzeWidget
+from ._gemspa_filter_links_widget import GEMspaFilterLinksWidget
 from ._gemspa_widget import GEMspaLogWidget
 from qtpy.QtWidgets import (QWidget, QLabel, QPushButton, QVBoxLayout, QTabWidget, QComboBox, QGridLayout)
 from qtpy import QtCore
@@ -18,8 +19,7 @@ class GEMspaLayerInput(QWidget):
         super().__init__()
 
         if layer_type not in self.supported_layer_types:
-            print("Invalid layer type")
-            raise ValueError
+            raise ValueError("Invalid layer type")
 
         self.viewer = napari_viewer
         self.layer_type = layer_type
@@ -137,7 +137,11 @@ class GEMspaPlugin(QWidget):
         widget = GEMspaLinkWidget(self.viewer)
         self.main_tab.addTab(widget, "Link features")
 
-        # Subwidget 3 : Analysis
+        # Subwidget 3 : Filter links
+        widget = GEMspaFilterLinksWidget(self.viewer)
+        self.main_tab.addTab(widget, "Filter links")
+
+        # Subwidget 4 : Analysis
         widget = GEMspaAnalyzeWidget(self.viewer)
         self.main_tab.addTab(widget, "Analyze tracks")
 
@@ -168,13 +172,16 @@ class GEMspaPlugin(QWidget):
             self.image_layer_widget.setVisible(False)
             self.points_layer_widget.setVisible(True)
             self.tracks_layer_widget.setVisible(False)
+        elif self.selected_widget.name == 'GEMspaFilterLinksWidget':
+            self.image_layer_widget.setVisible(False)
+            self.points_layer_widget.setVisible(False)
+            self.tracks_layer_widget.setVisible(True)
         elif self.selected_widget.name == 'GEMspaAnalyzeWidget':
             self.image_layer_widget.setVisible(False)
             self.points_layer_widget.setVisible(False)
             self.tracks_layer_widget.setVisible(True)
         else:
-            print("Invalid widget name")
-            raise ValueError
+            raise ValueError("Invalid widget name")
 
     def run(self):
         """Check inputs and start thread"""
@@ -191,6 +198,12 @@ class GEMspaPlugin(QWidget):
                                                     self.log_widget)
                 else:
                     self.selected_widget.show_error('No Points layers.')
+            elif self.selected_widget.name == 'GEMspaFilterLinksWidget':
+                if self.tracks_layer_widget.num_layers() > 0:
+                    self.selected_widget.start_task(self.tracks_layer_widget.layer_name(),
+                                                    self.log_widget)
+                else:
+                    self.selected_widget.show_error('No Tracks layers.')
             elif self.selected_widget.name == 'GEMspaAnalyzeWidget':
                 if self.tracks_layer_widget.num_layers() > 0:
                     self.selected_widget.start_task(self.tracks_layer_widget.layer_name(),
@@ -198,8 +211,7 @@ class GEMspaPlugin(QWidget):
                 else:
                     self.selected_widget.show_error('No Tracks layers.')
             else:
-                print("Invalid widget name")
-                raise ValueError
+                raise ValueError("Invalid widget name")
 
 
 

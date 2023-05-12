@@ -146,21 +146,13 @@ class GEMspaLocateWidget(GEMspaWidget):
         """Set the worker outputs to napari layer"""
 
         if 'df' in out_dict:
+            kwargs = {'scale': out_dict['scale'],
+                      'size': out_dict['diameter'],
+                      'name': 'Feature Locations',
+                      'face_color': 'transparent',
+                      'edge_color': 'red'}
             df = out_dict['df']
-            data = df[['frame', 'y', 'x']].to_numpy()
-
-            props = {}
-            for col in df.columns:
-                if col not in ['frame', 'z', 'y', 'x']:
-                    props[col] = df[col].to_numpy()
-
-            layer = self.viewer.add_points(data,
-                                           properties=props,
-                                           scale=out_dict['scale'],
-                                           size=out_dict['diameter'],
-                                           name='Feature Locations',
-                                           face_color='transparent',
-                                           edge_color='red')
+            layer = self._add_napari_layer("points", df, **kwargs)
 
             plots_viewer = self._new_plots_viewer(layer.name)
             properties_viewer = self._new_properties_viewer(layer.name)

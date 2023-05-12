@@ -1,6 +1,7 @@
-from qtpy.QtWidgets import (QWidget, QVBoxLayout, QTextEdit, QMessageBox)
+from qtpy.QtWidgets import (QWidget, QVBoxLayout, QTextEdit, QMessageBox, QGridLayout, QLabel)
 from qtpy.QtCore import Signal, QObject, QThread
 from ._gemspa_data_views import GEMspaTableWindow, GEMspaPlottingWindow
+import pandas as pd
 
 
 """Defines: GEMspaWidget, GEMspaWorker, GEMspaLogWidget"""
@@ -20,6 +21,31 @@ class GEMspaWorker(QObject):
 
     def __init__(self):
         super().__init__()
+
+    @staticmethod
+    def _make_trackpy_table(layer_type, data, props):
+        if layer_type == 'points':
+            df = pd.DataFrame()
+            df['y'] = data[:, 1]
+            df['x'] = data[:, 2]
+            for col in props.keys():
+                df[col] = props[col]
+            df['frame'] = data[:, 0]
+
+        elif layer_type == 'tracks':
+            df = pd.DataFrame()
+            df['y'] = data[:, 3]
+            df['x'] = data[:, 4]
+            for col in props.keys():
+                if col != 'track_id':
+                    df[col] = props[col]
+            df['frame'] = data[:, 1]
+            df['particle'] = data[:, 0]
+
+        else:
+            raise ValueError(f"Invalid layer type: {layer_type}")
+
+        return df
 
     def run(self):
         """Exec the data processing"""
@@ -50,8 +76,26 @@ class GEMspaWidget(QWidget):
         self._input_values = {}
         self._required_inputs = []
 
+    def init_ui(self):
+
+        layout = QVBoxLayout()
+
+        # Set up the input GUI items
+        grid_layout = QGridLayout()
+        grid_layout.setContentsMargins(0, 0, 0, 0)
+
+        i = 0
+        for key in self._input_values.keys():
+            grid_layout.addWidget(QLabel(key), i, 0)
+            grid_layout.addWidget(self._input_values[key], i, 1)
+            i += 1
+
+        layout.addLayout(grid_layout)
+        layout.addStretch()
+        self.setLayout(layout)
+
     def closeEvent(self, event):
-        self._delete_viewers
+        self._delete_viewers()
         event.accept()  # let the window close
 
     def _delete_viewers(self):
@@ -96,13 +140,23 @@ class GEMspaWidget(QWidget):
         else:
             return None
 
-    def _new_plots_viewer(self, title='Plot view'):
+    def _new_plots_viewer(self, title='Plot view', close_last=True):
+        if close_last and len(self.plots_viewers) >= 1:
+            viewer = self.plots_viewers.pop()
+            viewer.close()
+            viewer.deleteLater()
+
         i = len(self.plots_viewers)
         self.plots_viewers.append(GEMspaPlottingWindow(self.viewer))
         self.plots_viewers[i].setWindowTitle(title)
         return self.plots_viewers[i]
 
-    def _new_properties_viewer(self, title='Table view'):
+    def _new_properties_viewer(self, title='Table view', close_last=True):
+        if close_last and len(self.properties_viewers) >= 1:
+            viewer = self.properties_viewers.pop()
+            viewer.close()
+            viewer.deleteLater()
+
         i = len(self.properties_viewers)
         self.properties_viewers.append(GEMspaTableWindow(self.viewer))
         self.properties_viewers[i].setWindowTitle(title)
@@ -145,6 +199,24 @@ class GEMspaWidget(QWidget):
                     self.show_error(f"{key} input must be a number")
                     valid = False
         return valid
+
+    def _add_napari_layer(self, layer_type, df, **kwargs):
+
+        if layer_type == "points":
+            data = df[['frame', 'y', 'x']].to_numpy()
+            props = {}
+            for col in df.columns:
+                if col not in ['frame', 'z', 'y', 'x']:
+                    props[col] = df[col].to_numpy()
+            return self.viewer.add_points(data, properties=props, **kwargs)
+
+        elif layer_type == "tracks":
+            data = df[['particle', 'frame', 'z', 'y', 'x']].to_numpy()
+            props = {}
+            for col in df.columns:
+                if col not in ['particle', 'frame', 'z', 'y', 'x']:
+                    props[col] = df[col].to_numpy()
+            return self.viewer.add_tracks(data, properties=props, **kwargs)
 
 
 class GEMspaLogWidget(QWidget):

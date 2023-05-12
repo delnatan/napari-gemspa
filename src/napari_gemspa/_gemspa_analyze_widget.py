@@ -139,7 +139,7 @@ class GEMspaAnalyzeWorker(GEMspaWorker):
 
 
 class GEMspaAnalyzeWidget(GEMspaWidget):
-    """Widget for Locate Features plugin"""
+    """Widget for Analysis plugin"""
 
     name = "GEMspaAnalyzeWidget"
 
@@ -227,10 +227,14 @@ class GEMspaAnalyzeWidget(GEMspaWidget):
                            'tracks_layer_props': self.viewer.layers[layer_name].properties
                            },
                 'parameters': {'track_id': track_id,
-                               'microns_per_pixel': self._convert_to_float(self._input_values['Microns per px'].text()),
-                               'time_lag_sec': self._convert_to_float(self._input_values['Time lag (s)'].text()),
-                               'min_len_fit': self._convert_to_int(self._input_values['Min track len for fit (frames)'].text()),
-                               'max_lagtime_fit': self._convert_to_int(self._input_values['Max time lag for fit (frames)'].text()),
+                               'microns_per_pixel': self._convert_to_float(
+                                   self._input_values['Microns per px'].text()),
+                               'time_lag_sec': self._convert_to_float(
+                                   self._input_values['Time lag (sec)'].text()),
+                               'min_len_fit': self._convert_to_int(
+                                   self._input_values['Min track len for fit (frames)'].text()),
+                               'max_lagtime_fit': self._convert_to_int(
+                                   self._input_values['Max time lag for fit (frames)'].text()),
                                'batch': self._batch_check.isChecked(),
                                'error_term_fit': self._error_term_fit_check.isChecked()
                                },
@@ -255,7 +259,7 @@ class GEMspaAnalyzeWidget(GEMspaWidget):
             df_unique = df.drop_duplicates(subset='track_id', keep='first')
             df_unique = df_unique.drop(labels=['t', 'z', 'y', 'x'], axis=1)
 
-            properties_viewer = self._new_properties_viewer(layer.name)
+            properties_viewer = self._new_properties_viewer(layer.name, close_last=False)
             properties_viewer.reload_from_pandas(df_unique)
             properties_viewer.show()
 
@@ -264,7 +268,7 @@ class GEMspaAnalyzeWidget(GEMspaWidget):
                 title = layer.name
             else:
                 title = "Single track"
-            plots_viewer = self._new_plots_viewer(title)
+            plots_viewer = self._new_plots_viewer(title, close_last=False)
             plots_viewer.plot_analyze_results(out_dict['summary_data'])
             plots_viewer.show()
 
