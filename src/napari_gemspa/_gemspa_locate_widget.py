@@ -48,8 +48,6 @@ class GEMspaLocateWorker(GEMspaWorker):
             f = tp.batch(image, diameter, **state_params)
             self.log.emit(f"Processed {len(image)} frames, number of particles: {len(f)}")
 
-        # TODO: can trackpy handle 3d data?
-        # TODO: fix to check that image has a time dimension?
         if 'frame' not in f.columns:
             f['frame'] = t
 
@@ -152,6 +150,7 @@ class GEMspaLocateWidget(GEMspaWidget):
                       'face_color': 'transparent',
                       'edge_color': 'red'}
             df = out_dict['df']
+
             layer = self._add_napari_layer("points", df, **kwargs)
 
             plots_viewer = self._new_plots_viewer(layer.name)

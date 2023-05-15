@@ -5,7 +5,8 @@ It implements the Reader specification, but your plugin may choose to
 implement multiple readers or even other plugin contributions. see:
 https://napari.org/stable/plugins/guides.html?#readers
 """
-import numpy as np
+import pandas as pd
+import os
 
 
 def napari_get_reader(path):
@@ -22,18 +23,27 @@ def napari_get_reader(path):
         If the path is a recognized format, return a function that accepts the
         same path or list of paths, and returns a list of layer data tuples.
     """
-    if isinstance(path, list):
-        # reader plugins may be handed single path, or a list of paths.
-        # if it is a list, it is assumed to be an image stack...
-        # so we are only going to look at the first file.
-        path = path[0]
-
-    # if we know we cannot read the file, we immediately return None.
-    if not path.endswith(".npy"):
-        return None
+    # handle both a string and a list of strings
+    paths = [path] if isinstance(path, str) else path
+    for path in paths:
+        # if we know we cannot read the file, we immediately return None.
+        if not (path.endswith(".csv") or path.endswith('.txt') or path.endswith('.tsv')):
+            return None
 
     # otherwise we return the *function* that can read ``path``.
     return reader_function
+
+
+def _read_layer_data(df, columns):
+
+    data = df[columns].to_numpy()
+
+    props = {}
+    for col in df.columns:
+        if col not in columns:
+            props[col] = df[col].to_numpy()
+
+    return data, props
 
 
 def reader_function(path):
@@ -60,13 +70,33 @@ def reader_function(path):
     """
     # handle both a string and a list of strings
     paths = [path] if isinstance(path, str) else path
-    # load all files into array
-    arrays = [np.load(_path) for _path in paths]
-    # stack arrays into single array
-    data = np.squeeze(np.stack(arrays))
 
-    # optional kwargs for the corresponding viewer.add_* method
-    add_kwargs = {}
+    # load each file into pandas data frame, check format and add layer
+    for path in paths:
+        ext = os.path.splitext(path)[1]
+        if ext == '.csv':
+            sep = ','
+        elif ext == '.txt' or ext == '.tsv':
+            sep = '\t'
+        else:
+            raise ValueError("GEMspa can only read .csv, .txt or .tsv files.")
 
-    layer_type = "image"  # optional, default is "image"
-    return [(data, add_kwargs, layer_type)]
+        df = pd.read_csv(path, sep=sep)
+        for col in ['t', 'y', 'x']:
+            if col not in df.columns:
+                raise Exception(f"Error in reading layer data: required column {col} is missing.")
+        if 'z' in df.columns:
+            cols = ['t', 'z', 'y', 'x']
+        else:
+            cols = ['t', 'y', 'x']
+
+        if 'track_id' in df.columns:
+            layer_type = "tracks"
+            cols.insert(0, 'track_id')
+        else:
+            layer_type = "points"
+
+        data, props = _read_layer_data(df, cols)
+        add_kwargs = {'properties': props, 'name': os.path.split(path)[1]}
+
+        return [(data, add_kwargs, layer_type)]

@@ -33,6 +33,7 @@ class GEMspaLinkWorker(GEMspaWorker):
         min_frames = state_params['min_frames']
 
         points_layer_data = input_params['points_layer_data']
+        scale = input_params['points_layer_scale']
         points_layer_props = input_params['points_layer_props']
 
         out_data = dict()
@@ -55,10 +56,11 @@ class GEMspaLinkWorker(GEMspaWorker):
             # emit the output data after sorting by track_id (particle) and frame (needed for tracks layer)
             t.index.name = 'index'  # pandas complains when index name and column name are the same
             t = t.sort_values(by=['particle', 'frame'], axis=0, ascending=True)
-            if 'z' not in t.columns:
-                t['z'] = 0
+            #if 'z' not in t.columns:
+            #    t['z'] = 0
 
-            out_data = {'df': t}
+            out_data = {'df': t,
+                        'scale': scale}
         else:
             self.log.emit(f"The data does not have a dimension for linking.")
 
@@ -93,6 +95,7 @@ class GEMspaLinkWidget(GEMspaWidget):
         return {'name': self.name,
                 'inputs': {'points_layer_name': layer_name,
                            'points_layer_data': self.viewer.layers[layer_name].data,
+                           'points_layer_scale': self.viewer.layers[layer_name].scale,
                            'points_layer_props': self.viewer.layers[layer_name].properties
                            },
                 'parameters': {'search_range': self._convert_to_float(self._input_values['Link range'].text()),
@@ -108,6 +111,7 @@ class GEMspaLinkWidget(GEMspaWidget):
 
             kwargs = {'name': 'Linked features'}
             df = out_dict['df']
+
             layer = self._add_napari_layer("tracks", df, **kwargs)
 
             plots_viewer = self._new_plots_viewer(layer.name)
