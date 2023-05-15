@@ -48,8 +48,6 @@ class GEMspaLocateWorker(GEMspaWorker):
             f = tp.batch(image, diameter, **state_params)
             self.log.emit(f"Processed {len(image)} frames, number of particles: {len(f)}")
 
-        # TODO: can trackpy handle 3d data?
-        # TODO: fix to check that image has a time dimension?
         if 'frame' not in f.columns:
             f['frame'] = t
 
@@ -147,11 +145,18 @@ class GEMspaLocateWidget(GEMspaWidget):
 
         if 'df' in out_dict:
             df = out_dict['df']
-            data = df[['frame', 'y', 'x']].to_numpy()
 
+            if len(out_dict['scale']) == 4:
+                data_cols = ['frame', 'z', 'y', 'x']
+            elif len(out_dict['scale']) == 3:
+                data_cols = ['frame', 'y', 'x']
+            else:
+                raise ValueError("Data for points layer is not the expected number of dimensions (3 or 4).")
+
+            data = df[data_cols].to_numpy()
             props = {}
             for col in df.columns:
-                if col not in ['frame', 'z', 'y', 'x']:
+                if col not in data_cols:
                     props[col] = df[col].to_numpy()
 
             layer = self.viewer.add_points(data,

@@ -5,53 +5,33 @@ contributions:
     - id: napari-gemspa.get_reader
       python_name: napari_gemspa._reader:napari_get_reader
       title: Open data with GEMspa
-    - id: napari-gemspa.write_multiple
-      python_name: napari_gemspa._writer:write_multiple
-      title: Save multi-layer data with GEMspa
-    - id: napari-gemspa.write_single_image
-      python_name: napari_gemspa._writer:write_single_image
-      title: Save image data with GEMspa
+    - id: napari-gemspa.write_points
+      python_name: napari_gemspa._writer:write_points
+      title: Save points layer data with GEMspa
+    - id: napari-gemspa.write_tracks
+      python_name: napari_gemspa._writer:write_tracks
+      title: Save tracks layer data with GEMspa
     - id: napari-gemspa.make_sample_data
       python_name: napari_gemspa._sample_data:make_sample_data
       title: Load sample data from GEMspa
-#    - id: napari-gemspa.make_locate_widget
-#      python_name: napari_gemspa._widget:locate_widget
-#      title: Make locate widget
-#    - id: napari-gemspa.make_link_widget
-#      python_name: napari_gemspa._widget:link_widget
-#      title: Make link widget
-#    - id: napari-gemspa.make_filter_link_widget
-#      python_name: napari_gemspa._widget:filter_link_widget
-#      title: Make filter link widget
-#    - id: napari-gemspa.make_analyze_traj_widget
-#      python_name: napari_gemspa._widget:analyze_traj_widget
-#      title: Make analyze traj widget
     - id: napari-gemspa.make_gemspa_plugin
       python_name: napari_gemspa._gemspa_plugin:GEMspaPlugin
       title: Make GEMspa plugin
   readers:
     - command: napari-gemspa.get_reader
       accepts_directories: false
-      filename_patterns: ['*.npy']
+      filename_patterns: ['*.txt', '*.csv', '*.tsv']
   writers:
-    - command: napari-gemspa.write_multiple
-      layer_types: ['image*','labels*']
-      filename_extensions: []
-    - command: napari-gemspa.write_single_image
-      layer_types: ['image']
-      filename_extensions: ['.npy']
+    - command: napari-gemspa.write_points
+      layer_types: ['points']
+      filename_extensions: ["txt", "csv", "tsv"]
+    - command: napari-gemspa.write_tracks
+      layer_types: ['tracks']
+      filename_extensions: [ "txt", "csv", "tsv"]
   sample_data:
     - command: napari-gemspa.make_sample_data
       display_name: GEMspa
       key: unique_id.1
   widgets:
-#    - command: napari-gemspa.make_locate_widget
-#      display_name: Locate features
-#    - command: napari-gemspa.make_link_widget
-#      display_name: Link features
-#    - command: napari-gemspa.make_filter_link_widget
-#      display_name: Filter links
-#    - command: napari-gemspa.make_analyze_traj_widget
-#      display_name: Analyze trajectories
     - command: napari-gemspa.make_gemspa_plugin
       display_name: GEMspa
