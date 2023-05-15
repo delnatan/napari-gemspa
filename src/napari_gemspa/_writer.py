@@ -45,13 +45,13 @@ def write_points(path: str, data: Any, meta: dict) -> List[str]:
 
     df = pd.DataFrame()
     if data.shape[1] == 2:
-        df['t'] = np.zeros(data.shape[0], dtype=int)
+        #df['frame'] = np.zeros(data.shape[0], dtype=int)
         i = 0
     elif data.shape[1] == 3:
-        df['t'] = data[:, 0]
+        df['frame'] = data[:, 0]
         i = 1
     else:  # data.shape[1] >= 4
-        df['t'] = data[:, 0]
+        df['frame'] = data[:, 0]
         df['z'] = data[:, 1]
         i = 2
     df['y'] = data[:, i]
@@ -77,7 +77,7 @@ def write_tracks(path: str, data: Any, meta: dict) -> List[str]:
 
     df = pd.DataFrame()
     df['track_id'] = data[:, 0]
-    df['t'] = data[:, 1]
+    df['frame'] = data[:, 1]
     if data.shape[1] == 4:
         i = 2
     else:  # data.shape[1] >= 5

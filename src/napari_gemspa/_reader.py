@@ -82,21 +82,37 @@ def reader_function(path):
             raise ValueError("GEMspa can only read .csv, .txt or .tsv files.")
 
         df = pd.read_csv(path, sep=sep)
-        for col in ['t', 'y', 'x']:
+        cols = ['y', 'x']
+        for col in cols:
             if col not in df.columns:
                 raise Exception(f"Error in reading layer data: required column {col} is missing.")
+
         if 'z' in df.columns:
-            cols = ['t', 'z', 'y', 'x']
-        else:
-            cols = ['t', 'y', 'x']
+            cols.insert(0, 'z')
+
+        if 'frame' in df.columns:
+            cols.insert(0, 'frame')
+        elif 't' in df.columns:
+            cols.insert(0, 't')
 
         if 'track_id' in df.columns:
             layer_type = "tracks"
+            if cols[0] != 'frame' and cols[0] != 't':
+                raise Exception(
+                    f"Error in reading layer data: data appears to be tracks layer but frame/time column is missing.")
             cols.insert(0, 'track_id')
         else:
             layer_type = "points"
 
         data, props = _read_layer_data(df, cols)
-        add_kwargs = {'properties': props, 'name': os.path.split(path)[1]}
+        add_kwargs = {'properties': props,
+                      'name': os.path.split(path)[1]}
+
+        if layer_type == 'points':
+            add_kwargs['face_color'] = 'transparent'
+            add_kwargs['edge_color'] = 'red'
+        elif layer_type == 'tracks':
+            add_kwargs['blending'] = 'translucent'
+            add_kwargs['tail_length'] = data[:, 1].max()
 
         return [(data, add_kwargs, layer_type)]

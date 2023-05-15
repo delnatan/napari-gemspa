@@ -33,7 +33,12 @@ class GEMspaAnalyzeWorker(GEMspaWorker):
         error_term_fit = state_params['error_term_fit']
 
         tracks_layer_data = input_params['tracks_layer_data']
-        tracks = ParticleTracks(tracks_layer_data)
+        scale = input_params['tracks_layer_scale']
+        if tracks_layer_data.shape[1] == 4:
+            # ParticleTracks class expects a column for z-dimension
+            tracks = ParticleTracks(np.insert(tracks_layer_data, 2, 0, axis=1))
+        else:
+            tracks = ParticleTracks(tracks_layer_data)
         tracks.microns_per_pixel = microns_per_pixel
         tracks.time_lag_sec = time_lag_sec
 
@@ -42,12 +47,18 @@ class GEMspaAnalyzeWorker(GEMspaWorker):
 
             # Ensemble average effective Diffusion (linear) and alpha (log-log)
             msds = tracks.msd_all_tracks()
+            step_sizes = tracks.step_size_all_tracks()
             ens_msds, n_ens_tracks = tracks.ensemble_avg_msd()
 
             # fit ensemble MSD, get D and alpha
-            D, E, r_squared1 = tracks.fit_msd_linear(t=ens_msds[1:, 0], msd=ens_msds[1:, 4], dim=2,
-                                                     max_lagtime=max_lagtime_fit, err=error_term_fit)
-            K, alpha, r_squared2 = tracks.fit_msd_loglog(t=ens_msds[1:, 0], msd=ens_msds[1:, 4], dim=2,
+            D, E, r_squared1 = tracks.fit_msd_linear(t=ens_msds[1:, 0],
+                                                     msd=ens_msds[1:, 4],
+                                                     dim=2,
+                                                     max_lagtime=max_lagtime_fit,
+                                                     err=error_term_fit)
+            K, alpha, r_squared2 = tracks.fit_msd_loglog(t=ens_msds[1:, 0],
+                                                         msd=ens_msds[1:, 4],
+                                                         dim=2,
                                                          max_lagtime=max_lagtime_fit)
             data = [['sum',
                      D,
@@ -59,40 +70,67 @@ class GEMspaAnalyzeWorker(GEMspaWorker):
             ens_fit_data = pd.DataFrame(data, columns=['dim', 'D', 'E', 'r_sq (lin)', 'K', 'a', 'r_sq (log)'])
 
             # fit the msd of each track - linear and loglog scale
-            tracks.fit_msd_all_tracks(linear_fit=True, min_len=min_len_fit, max_lagtime=max_lagtime_fit,
+            tracks.fit_msd_all_tracks(linear_fit=True,
+                                      min_len=min_len_fit,
+                                      max_lagtime=max_lagtime_fit,
                                       err=error_term_fit)
-            tracks.fit_msd_all_tracks(linear_fit=False, min_len=min_len_fit, max_lagtime=max_lagtime_fit,
+            tracks.fit_msd_all_tracks(linear_fit=False,
+                                      min_len=min_len_fit,
+                                      max_lagtime=max_lagtime_fit,
                                       err=error_term_fit)
 
             self.log.emit(f"Total number of tracks: {len(tracks.track_ids)}\n" +
                           f"After length filter, number of tracks: {len(tracks.linear_fit_results)}\n")
 
-            # emit the output data:
-
             # Gather the fit data
-            all_fit_data = pd.DataFrame(np.concatenate([tracks.linear_fit_results, tracks.loglog_fit_results[:, 2:]], axis=1),
-                                      columns=['track_id', 'dim', 'D', 'E', 'r_sq (lin)', 'K', 'a', 'r_sq (log)'])
+            all_fit_data = np.concatenate([tracks.linear_fit_results, tracks.loglog_fit_results[:, 2:]], axis=1)
+            all_fit_data = pd.DataFrame(all_fit_data, columns=['track_id',
+                                                               'dim',
+                                                               'D',
+                                                               'E',
+                                                               'r_sq (lin)',
+                                                               'K',
+                                                               'a',
+                                                               'r_sq (log)'])
             all_fit_data.drop('dim', axis=1, inplace=True)
-            # all_fit_data = all_fit_data.round({'D': 4, 'E': 4, 'r_sq (lin)': 2, 'K': 4, 'a': 4, 'r_sq (log)': 2})
+            all_fit_data = all_fit_data.round({'D': 4, 'E': 4, 'r_sq (lin)': 2, 'K': 4, 'a': 4, 'r_sq (log)': 2})
 
             # Merge fit results with track data
-            track_data = pd.DataFrame(tracks.tracks, columns=['track_id', 't', 'z', 'y', 'x'])
-            merged_data = track_data.merge(all_fit_data, how='right', on='track_id')
+            if tracks_layer_data.shape[1] == 5:
+                cols = ['track_id', 'frame', 'z', 'y', 'x']
+            elif tracks_layer_data.shape[1] == 4:
+                cols = ['track_id', 'frame', 'y', 'x']
+            else:
+                raise ValueError("")
+
+            track_data = pd.DataFrame(tracks_layer_data, columns=cols)
+            msds = pd.DataFrame(msds[:, [1, 5]], columns=['tau', 'msd'])
+            msds.msd = msds.msd.where(msds.tau > 0, other=np.nan)
+            step_sizes = pd.DataFrame(step_sizes[:, [1, 5]], columns=['t', 'step_size'])
+            step_sizes.where(step_sizes.t > 0, other=np.nan)
+            step_sizes.step_size = step_sizes.step_size.where(step_sizes.t > 0, other=np.nan)
+            track_data = pd.concat([track_data, msds, step_sizes], axis=1)
+
+            merged_data = track_data.merge(all_fit_data, how='left', on='track_id')
 
             # Add frame start and frame end to the fit results
-            frames = merged_data.groupby('track_id', as_index=False).agg(frame_start=('t', 'min'), frame_end=('t', 'max'))
+            frames = merged_data.groupby('track_id', as_index=False).agg(frame_start=('frame', 'min'),
+                                                                         frame_end=('frame', 'max'))
             merged_data = frames.merge(merged_data, how='right', on='track_id')
 
+            # emit the output data
             out_data = {'df': merged_data,
                         'summary_data': {'ens_fit_results': ens_fit_data,
                                          'ens_msd': ens_msds[1:max_lagtime_fit + 1, [0, 4]]
-                                         }
+                                         },
+                        'scale': scale
                         }
 
         else:
             if track_id in tracks.track_lengths[:, 0]:
 
-                msd = tracks.msd(track_id, fft=True)
+                msds = tracks.msd(track_id, fft=True)
+                step_sizes = tracks.step_size(track_id)
                 frames = tracks.tracks[tracks.tracks[:, 0] == track_id, 1]
 
                 # Fit for Diffusion coefficient etc
@@ -110,9 +148,14 @@ class GEMspaAnalyzeWorker(GEMspaWorker):
                     else:
                         d = 1
 
-                    D, E, r_squared1 = tracks.fit_msd_linear(t=msd[1:, 0], msd=msd[1:, col], dim=d,
-                                                             max_lagtime=max_lagtime_fit, err=error_term_fit)
-                    K, alpha, r_squared2 = tracks.fit_msd_loglog(t=msd[1:, 0], msd=msd[1:, col], dim=d,
+                    D, E, r_squared1 = tracks.fit_msd_linear(t=msds[1:, 0],
+                                                             msd=msds[1:, col],
+                                                             dim=d,
+                                                             max_lagtime=max_lagtime_fit,
+                                                             err=error_term_fit)
+                    K, alpha, r_squared2 = tracks.fit_msd_loglog(t=msds[1:, 0],
+                                                                 msd=msds[1:, col],
+                                                                 dim=d,
                                                                  max_lagtime=max_lagtime_fit)
                     data.append([track_id,
                                  frames.min(),
@@ -125,11 +168,34 @@ class GEMspaAnalyzeWorker(GEMspaWorker):
                                  alpha,
                                  r_squared2])
 
-                data = pd.DataFrame(data, columns=['track_id', 'start', 'end', 'dim',
-                                                   'D', 'E', 'r_sq (lin)', 'K', 'a', 'r_sq (log)'])
+                data = pd.DataFrame(data, columns=['track_id',
+                                                   'start',
+                                                   'end',
+                                                   'dim',
+                                                   'D',
+                                                   'E',
+                                                   'r_sq (lin)',
+                                                   'K',
+                                                   'a',
+                                                   'r_sq (log)'])
 
-                out_data = {'summary_data': {'fit_results': data,
-                                             'msd': msd[1:max_lagtime_fit + 1, [0, 4]]}
+                if tracks_layer_data.shape[1] == 5:
+                    cols = ['track_id', 'frame', 'z', 'y', 'x']
+                elif tracks_layer_data.shape[1] == 4:
+                    cols = ['track_id', 'frame', 'y', 'x']
+                else:
+                    raise ValueError("")
+
+                track_data = pd.DataFrame(tracks_layer_data[tracks_layer_data[:, 0] == track_id, :], columns=cols)
+                msds = pd.DataFrame(msds[:, [1, 5]], columns=['tau', 'msd'])
+                step_sizes = pd.DataFrame(step_sizes[:, [1, 5]], columns=['t', 'step_size'])
+                track_data = pd.concat([track_data, msds, step_sizes], axis=1, ignore_index=True)
+
+                out_data = {'df': track_data,
+                            'summary_data': {'fit_results': data,
+                                             'msd': msds[1:max_lagtime_fit + 1, [0, 4]]
+                                             },
+                            'scale': scale
                             }
             else:
                 self.log.emit(f"Track id {track_id} not found.")
@@ -224,6 +290,7 @@ class GEMspaAnalyzeWidget(GEMspaWidget):
         return {'name': self.name,
                 'inputs': {'tracks_layer_name': layer_name,
                            'tracks_layer_data': self.viewer.layers[layer_name].data,
+                           'tracks_layer_scale': self.viewer.layers[layer_name].scale,
                            'tracks_layer_props': self.viewer.layers[layer_name].properties
                            },
                 'parameters': {'track_id': track_id,
@@ -246,22 +313,23 @@ class GEMspaAnalyzeWidget(GEMspaWidget):
         layer = None
         if 'df' in out_dict:
             df = out_dict['df']
-            data = df[['track_id', 't', 'z', 'y', 'x']].to_numpy()
+            kwargs = {'scale': out_dict['scale'],
+                      'blending': 'translucent',
+                      'tail_length': df['frame'].max(),
+                      'name': 'Analyzed tracks'}
 
-            props = {}
-            for col in df.columns:
-                if col not in ['track_id', 't', 'z', 'y', 'x']:
-                    props[col] = df[col].to_numpy()
+            layer = self._add_napari_layer("tracks", df, **kwargs)
 
-            layer = self.viewer.add_tracks(data, properties=props, name='Analyzed tracks')
+            if self.display_table_view:
+                # Show table of properties (analysis results) - only show one line for each track
+                df_unique = df.drop_duplicates(subset='track_id', keep='first')
+                df_unique = df_unique.drop(labels=['frame', 'y', 'x', 'tau', 'msd', 't', 'step_size'], axis=1)
+                if 'z' in df_unique.columns:
+                    df_unique = df_unique.drop(labels=['z'], axis=1)
 
-            # Show table of properties (analysis results) - only show one line for each track
-            df_unique = df.drop_duplicates(subset='track_id', keep='first')
-            df_unique = df_unique.drop(labels=['t', 'z', 'y', 'x'], axis=1)
-
-            properties_viewer = self._new_properties_viewer(layer.name, close_last=False)
-            properties_viewer.reload_from_pandas(df_unique)
-            properties_viewer.show()
+                properties_viewer = self._new_properties_viewer(layer.name, close_last=False)
+                properties_viewer.reload_from_pandas(df_unique)
+                properties_viewer.show()
 
         if 'summary_data' in out_dict:
             if layer is not None:

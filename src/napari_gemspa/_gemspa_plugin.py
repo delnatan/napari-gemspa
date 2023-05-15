@@ -143,6 +143,7 @@ class GEMspaPlugin(QWidget):
 
         # Subwidget 4 : Analysis
         widget = GEMspaAnalyzeWidget(self.viewer)
+        widget.display_table_view = True
         self.main_tab.addTab(widget, "Analyze tracks")
 
         # Run button

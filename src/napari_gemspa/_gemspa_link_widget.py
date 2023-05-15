@@ -56,8 +56,9 @@ class GEMspaLinkWorker(GEMspaWorker):
             # emit the output data after sorting by track_id (particle) and frame (needed for tracks layer)
             t.index.name = 'index'  # pandas complains when index name and column name are the same
             t = t.sort_values(by=['particle', 'frame'], axis=0, ascending=True)
-            #if 'z' not in t.columns:
-            #    t['z'] = 0
+
+            # change column name from 'particle' to 'track_id' to identify the track for consistency with napari layer
+            t.rename(columns={'particle': 'track_id'}, inplace=True)
 
             out_data = {'df': t,
                         'scale': scale}
@@ -108,20 +109,26 @@ class GEMspaLinkWidget(GEMspaWidget):
         """Set the worker outputs to napari layers"""
 
         if 'df' in out_dict:
-
-            kwargs = {'name': 'Linked features'}
             df = out_dict['df']
+            kwargs = {'scale': out_dict['scale'],
+                      'blending': 'translucent',
+                      'tail_length': df['frame'].max(),
+                      'name': 'Linked features'}
 
-            layer = self._add_napari_layer("tracks", df, **kwargs)
+            if len(df) == 0:
+                self.show_error("No particles were linked!")
+            else:
+                layer = self._add_napari_layer("tracks", df, **kwargs)
 
-            plots_viewer = self._new_plots_viewer(layer.name)
-            properties_viewer = self._new_properties_viewer(layer.name)
+                plots_viewer = self._new_plots_viewer(layer.name)
+                properties_viewer = self._new_properties_viewer(layer.name)
 
-            plots_viewer.plot_link_results(df)
-            plots_viewer.show()
+                plots_viewer.plot_link_results(df)
+                plots_viewer.show()
 
-            df.insert(0, 'z', df.pop('z'))
-            df.insert(0, 't', df.pop('frame'))
-            df.insert(0, 'track_id', df.pop('particle'))
-            properties_viewer.reload_from_pandas(df)
-            properties_viewer.show()
+                # Fixing column ordering for display on table view
+                if self.display_table_view:
+                    df.insert(0, 'frame', df.pop('frame'))
+                    df.insert(0, 'track_id', df.pop('track_id'))
+                    properties_viewer.reload_from_pandas(df)
+                    properties_viewer.show()

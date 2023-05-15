@@ -1,7 +1,7 @@
 import napari
 import os
 from skimage import io
-
+from napari_gemspa import napari_get_reader
 
 def create_viewer():
     # create a new napari viewer object
@@ -9,46 +9,25 @@ def create_viewer():
 
     # add some layers to the viewer - there is an example movie in the same path as this script file
     path = os.path.split(os.path.realpath(__file__))[0]
-    example_tif_movie = "example_movie_hpne_CytoGEMs_005.tif"
+    example_tif_movie = "example_movie_hpne_CytoGEMs_005_1-100.tif"
     movie = io.imread(os.path.join(path, example_tif_movie))
     viewer.add_image(movie)
 
-    full_test=False
-    if full_test:
-        pass
+    test_analyze = True
+    if test_analyze:
+        # read in a points layer
+        example_points_layer = "example_features.txt"
+        reader = napari_get_reader(example_points_layer)
+        layer_data_list = reader(example_points_layer)
+        layer_data_tuple = layer_data_list[0]
+        viewer.add_points(layer_data_tuple[0], **layer_data_tuple[1])
 
-        # Perform locate...
-        # my_widget = locate_widget()
-        # print("Locating spots...")
-        # layer_data = my_widget(viewer,
-        #                        viewer.layers[0],
-        #                        batch=True,
-        #                        diameter=11,
-        #                        min_mass=75,
-        #                        invert=False)
-        # #viewer.add_points(layer_data[0], **layer_data[1])
-        #
-        # # Perform link...
-        # my_widget = link_widget()
-        # layer_data = my_widget(viewer,
-        #                        viewer.layers[1],
-        #                        link_range=5,
-        #                        memory=0,
-        #                        min_frames=3)
-        # #viewer.add_tracks(layer_data[0], **layer_data[1])
-        #
-        # # Call analyze...
-        # my_widget = analyze_traj_widget()
-        # layer_data = my_widget(viewer,
-        #                        viewer.layers[0],
-        #                        viewer.layers[2],
-        #                        batch=True,
-        #                        track_id=7,
-        #                        microns_per_pixel=0.11,
-        #                        time_lag_sec=0.010,
-        #                        max_lagtime_fit=10,
-        #                        min_len_fit=11,
-        #                        error_term_fit=True)
+        # read in a tracks layer
+        example_tracks_layer = "example_linked_features_filt.txt"
+        reader = napari_get_reader(example_tracks_layer)
+        layer_data_list = reader(example_tracks_layer)
+        layer_data_tuple = layer_data_list[0]
+        viewer.add_tracks(layer_data_tuple[0], **layer_data_tuple[1])
 
     # return the viewer object
     return viewer

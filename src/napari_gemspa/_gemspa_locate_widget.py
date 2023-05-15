@@ -72,7 +72,7 @@ class GEMspaLocateWidget(GEMspaWidget):
         self._preprocess_check = QCheckBox('Preprocess')
 
         self._input_values = {'Diameter': QLineEdit('11'),
-                              'Min mass': QLineEdit('100'),
+                              'Min mass': QLineEdit('125'),
                               'Max size': QLineEdit(''),
                               'Separation': QLineEdit(''),
                               'Noise size': QLineEdit('1'),
@@ -151,16 +151,20 @@ class GEMspaLocateWidget(GEMspaWidget):
                       'edge_color': 'red'}
             df = out_dict['df']
 
-            layer = self._add_napari_layer("points", df, **kwargs)
+            if len(df) == 0:
+                self.show_error("No particles were located!")
+            else:
+                layer = self._add_napari_layer("points", df, **kwargs)
 
-            plots_viewer = self._new_plots_viewer(layer.name)
-            properties_viewer = self._new_properties_viewer(layer.name)
+                plots_viewer = self._new_plots_viewer(layer.name)
+                properties_viewer = self._new_properties_viewer(layer.name)
 
-            # viewer for the graphical output
-            plots_viewer.plot_locate_results(df)
-            plots_viewer.show()
+                # viewer for the graphical output
+                plots_viewer.plot_locate_results(df)
+                plots_viewer.show()
 
-            # viewer for feature properties
-            df.insert(0, 't', df.pop('frame'))
-            properties_viewer.reload_from_pandas(df)
-            properties_viewer.show()
+                if self.display_table_view:
+                    # viewer for feature properties
+                    df.insert(0, 'frame', df.pop('frame'))
+                    properties_viewer.reload_from_pandas(df)
+                    properties_viewer.show()

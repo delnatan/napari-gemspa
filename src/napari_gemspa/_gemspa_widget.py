@@ -26,22 +26,34 @@ class GEMspaWorker(QObject):
     def _make_trackpy_table(layer_type, data, props):
         if layer_type == 'points':
             df = pd.DataFrame()
-            df['y'] = data[:, 1]
-            df['x'] = data[:, 2]
+            if data.shape[1] == 2:
+                i = 0
+            elif data.shape[1] == 3:
+                df['frame'] = data[:, 0]
+                i = 1
+            else:  # data.shape[1] >= 4
+                df['frame'] = data[:, 0]
+                df['z'] = data[:, 1]
+                i = 2
+            df['y'] = data[:, i]
+            df['x'] = data[:, i + 1]
             for col in props.keys():
                 df[col] = props[col]
-            df['frame'] = data[:, 0]
 
         elif layer_type == 'tracks':
             df = pd.DataFrame()
-            df['y'] = data[:, 3]
-            df['x'] = data[:, 4]
+            df['particle'] = data[:, 0]
+            df['frame'] = data[:, 1]
+            if data.shape[1] == 4:
+                i = 2
+            else:  # data.shape[1] >= 5
+                df['z'] = data[:, 2]
+                i = 3
+            df['y'] = data[:, i]
+            df['x'] = data[:, i+1]
             for col in props.keys():
                 if col != 'track_id':
                     df[col] = props[col]
-            df['frame'] = data[:, 1]
-            df['particle'] = data[:, 0]
-
         else:
             raise ValueError(f"Invalid layer type: {layer_type}")
 
@@ -73,6 +85,8 @@ class GEMspaWidget(QWidget):
         # viewers for the graphical output
         self.plots_viewers = []
 
+        self.display_table_view = False
+
         self._input_values = {}
         self._required_inputs = []
 
@@ -95,6 +109,8 @@ class GEMspaWidget(QWidget):
         self.setLayout(layout)
 
     def closeEvent(self, event):
+        # TODO: this isn't being called when viewer is closed or when plugin is closed
+        # assert (False)
         self._delete_viewers()
         event.accept()  # let the window close
 
@@ -203,20 +219,26 @@ class GEMspaWidget(QWidget):
     def _add_napari_layer(self, layer_type, df, **kwargs):
 
         if layer_type == "points":
-            data = df[['frame', 'y', 'x']].to_numpy()
-            props = {}
-            for col in df.columns:
-                if col not in ['frame', 'z', 'y', 'x']:
-                    props[col] = df[col].to_numpy()
-            return self.viewer.add_points(data, properties=props, **kwargs)
-
+            if 'z' in df.columns:
+                data_cols = ['frame', 'z', 'y', 'x']
+            else:
+                data_cols = ['frame', 'y', 'x']
         elif layer_type == "tracks":
-            data = df[['particle', 'frame', 'z', 'y', 'x']].to_numpy()
-            props = {}
-            for col in df.columns:
-                if col not in ['particle', 'frame', 'z', 'y', 'x']:
-                    props[col] = df[col].to_numpy()
-            return self.viewer.add_tracks(data, properties=props, **kwargs)
+            if 'z' in df.columns:
+                data_cols = ['track_id', 'frame', 'z', 'y', 'x']
+            else:
+                data_cols = ['track_id', 'frame', 'y', 'x']
+        else:
+            raise ValueError(f"Unrecognized layer type: {layer_type}.  Expected points or tracks.")
+
+        data = df[data_cols].to_numpy()
+        props = {}
+        for col in df.columns:
+            if col not in data_cols:
+                props[col] = df[col].to_numpy()
+
+        add_layer = getattr(self.viewer, f"add_{layer_type}")
+        return add_layer(data, properties=props, **kwargs)
 
 
 class GEMspaLogWidget(QWidget):

@@ -21,7 +21,7 @@ class GEMspaPlottingWindow(QMainWindow):
 
         self.viewer = napari_viewer
 
-        self.centralWidget = QWidget()
+        self.centralWidget = QWidget(self)
         self.setCentralWidget(self.centralWidget)
         self.verticalLayout = QVBoxLayout(self.centralWidget)
 
@@ -71,7 +71,7 @@ class GEMspaPlottingWindow(QMainWindow):
         axs = self.canvas.figure.subplots(1, 2)
 
         # Show plots of mass vs. size and mass vs. eccentricity
-        mean_t = df.groupby('particle').mean()
+        mean_t = df.groupby('track_id').mean()
 
         axs[0].plot(mean_t['mass'], mean_t['size'], 'ko', alpha=0.1)
         axs[0].set(xlabel='mass', ylabel='size')
@@ -88,7 +88,7 @@ class GEMspaPlottingWindow(QMainWindow):
         ax = self.canvas.figure.subplots(1, 1)
 
         # Plot all tracks
-        for group in df.groupby('particle'):
+        for group in df.groupby('track_id'):
             ax.plot(group['x'], group['y'], '-')
         self.canvas.figure.tight_layout()
 
@@ -302,12 +302,15 @@ class GEMspaTableWindow(QMainWindow):
         headers = []
         if isinstance(self.viewer.layers[layer_name], napari.layers.points.points.Points):
             if data.shape[1] == 3:
-                headers = ['t', 'y', 'x']
+                headers = ['frame', 'y', 'x']
             elif data.shape[1] == 4:
-                headers = ['t', 'z', 'y', 'x']
+                headers = ['frame', 'z', 'y', 'x']
 
         elif isinstance(self.viewer.layers[layer_name], napari.layers.tracks.tracks.Tracks):
-            headers = ['track_id', 't', 'z', 'y', 'x']
+            if data.shape[1] == 4:
+                headers = ['track_id', 'frame', 'y', 'x']
+            elif data.shape[1] == 5:
+                headers = ['track_id', 'frame', 'z', 'y', 'x']
 
             # Avoid repeated column: napari adds track_id column to properties
             del properties['track_id']
