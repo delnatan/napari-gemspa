@@ -25,7 +25,6 @@ class GEMspaAnalyzeWorker(GEMspaWorker):
         state_params = state['parameters']
 
         batch = state_params['batch']
-        color_by = state_params['color_by']
         track_id = state_params['track_id']
         microns_per_pixel = state_params['microns_per_pixel']
         time_lag_sec = state_params['time_lag_sec']
@@ -34,7 +33,6 @@ class GEMspaAnalyzeWorker(GEMspaWorker):
         error_term_fit = state_params['error_term_fit']
 
         tracks_layer_data = input_params['tracks_layer_data']
-        scale = input_params['tracks_layer_scale']
         if tracks_layer_data.shape[1] == 4:
             # ParticleTracks class expects a column for z-dimension
             tracks = ParticleTracks(np.insert(tracks_layer_data, 2, 0, axis=1))
@@ -129,11 +127,12 @@ class GEMspaAnalyzeWorker(GEMspaWorker):
             # emit the output data
             out_data = {'df': merged_data,
                         'summary_data': summary_data,
-                        'scale': scale,
                         'batch': batch,
-                        'color_by': color_by
+                        'tracks_layer_scale': input_params['tracks_layer_scale'],
+                        'image_layer_shape': input_params['image_layer_shape'],
+                        'color_by': state['color_by'],
+                        'color_by_min_max': state['color_by_min_max']
                         }
-
         else:
             if track_id in tracks.track_lengths[:, 0]:
 
@@ -201,8 +200,8 @@ class GEMspaAnalyzeWorker(GEMspaWorker):
 
                 out_data = {'df': track_data,
                             'summary_data': summary_data,
-                            'scale': scale,
                             'batch': batch,
+                            'display': state['display'],
                             }
             else:
                 self.log.emit(f"Track id {track_id} not found.")
@@ -223,13 +222,28 @@ class GEMspaAnalyzeWidget(GEMspaWidget):
         self._error_term_fit_check = QCheckBox('Fit with error term')
         self._color_by_combo = QComboBox()
 
-        # Add items to the QComboBox
-        self._color_by_combo.addItem("Track id")
-        self._color_by_combo.addItem("Diffusion coefficient (D)")
-        self._color_by_combo.addItem("anomalous exponent (alpha)")
-        self._color_by_combo.addItem("Step size")
-        self._color_by_combo.addItem("Time (from track start)")
-        self._color_by_combo.addItem("Time (from movie start)")
+        # Add check boxes for how to draw rainbow tracks
+        self._color_by_checks = [QCheckBox("Track id"),
+                                 QCheckBox("Diffusion coefficient (D)"),
+                                 QCheckBox("Anomalous exponent (alpha)"),
+                                 QCheckBox("Step size (microns)"),
+                                 QCheckBox("Goodness-of-fit for D (R-sq)"),
+                                 QCheckBox("Time (from track start)"),
+                                 QCheckBox("Time (from movie start)")
+                                 ]
+        self._columns_map = {"Track id": "track_id",
+                             "Diffusion coefficient (D)": "D",
+                             "Anomalous exponent (alpha)": "a",
+                             "Step size": "step_size",
+                             "Goodness-of-fit for D (R-sq)": "r_sq (lin)",
+                             "Time (from movie start)": "frame",
+                             "Time (from track start)": "t"
+                             }
+
+        self._color_by_min_D_input = QLineEdit('0')
+        self._color_by_max_D_input = QLineEdit('2')
+        self._color_by_min_alpha_input = QLineEdit('0')
+        self._color_by_max_alpha_input = QLineEdit('2')
 
         self._input_values = {'Track id': QLineEdit(''),
                               'Microns per px': QLineEdit('0.134'),
@@ -260,23 +274,48 @@ class GEMspaAnalyzeWidget(GEMspaWidget):
         for key in self._input_values.keys():
             grid_layout.addWidget(QLabel(key), i, 0)
             grid_layout.addWidget(self._input_values[key], i, 1)
+            self._input_values[key].setFixedWidth(50)
             i += 1
 
         grid_layout.addWidget(self._error_term_fit_check, i, 0, 1, 2)
         i += 1
 
-        grid_layout.addWidget(QLabel("Color tracks by"), i, 0)
-        grid_layout.addWidget(self._color_by_combo, i, 1)
+        grid_layout.addWidget(QLabel('Show plot of tracks colored by:'), i, 0)
         i += 1
+
+        for check_box in self._color_by_checks:
+            grid_layout.addWidget(check_box, i, 0, 1, 2)
+            if check_box.text() == "Diffusion coefficient (D)":
+                grid_layout.addWidget(QLabel("Min"), i, 1)
+                grid_layout.addWidget(self._color_by_min_D_input, i, 2)
+                self._color_by_min_D_input.setFixedWidth(50)
+
+                grid_layout.addWidget(QLabel("Max"), i, 3)
+                grid_layout.addWidget(self._color_by_max_D_input, i, 4)
+                self._color_by_max_D_input.setFixedWidth(50)
+
+            if check_box.text() == "Anomalous exponent (alpha)":
+                grid_layout.addWidget(QLabel("Min"), i, 1)
+                grid_layout.addWidget(self._color_by_min_alpha_input, i, 2)
+                self._color_by_min_alpha_input.setFixedWidth(50)
+
+                grid_layout.addWidget(QLabel("Max"), i, 3)
+                grid_layout.addWidget(self._color_by_max_alpha_input, i, 4)
+                self._color_by_max_alpha_input.setFixedWidth(50)
+
+            i += 1
+
+        self._color_by_checks[0].setChecked(True)
+        self._color_by_checks[1].setChecked(True)
 
         layout.addLayout(grid_layout)
         layout.addStretch()
         self.setLayout(layout)
 
-    def start_task(self, layer_name, log_widget):
+    def start_task(self, layer_names, log_widget):
         # initialize worker and start task
         self.worker = GEMspaAnalyzeWorker()
-        super().start_task(layer_name, log_widget)
+        super().start_task(layer_names, log_widget)
 
     def check_inputs(self):
         # Special case for track id, it is required if batch is not checked
@@ -299,19 +338,38 @@ class GEMspaAnalyzeWidget(GEMspaWidget):
                 except ValueError:
                     self.show_error(f"{key} input must be a number")
                     valid = False
+
+        for line_input in [self._color_by_min_D_input,
+                      self._color_by_max_D_input,
+                      self._color_by_min_alpha_input,
+                      self._color_by_max_alpha_input]:
+            text = line_input.text()
+            if text:
+                # if input is not blank, check it is a number
+                try:
+                    _ = float(text)
+                except ValueError:
+                    self.show_error(f"Min/Max for color by must be a number")
+                    valid = False
+
         return valid
 
-    def state(self, layer_name) -> dict:
+    def state(self, layer_names) -> dict:
         if self._batch_check.isChecked():
             track_id = None
         else:
             track_id = self._convert_to_int(self._input_values['Track id'].text())
 
+        color_by = {}
+        for check_box in self._color_by_checks:
+            color_by[check_box.text()] = check_box.isChecked()
+
         return {'name': self.name,
-                'inputs': {'tracks_layer_name': layer_name,
-                           'tracks_layer_data': self.viewer.layers[layer_name].data,
-                           'tracks_layer_scale': self.viewer.layers[layer_name].scale,
-                           'tracks_layer_props': self.viewer.layers[layer_name].properties
+                'inputs': {'tracks_layer_name': layer_names['tracks'],
+                           'tracks_layer_scale': self.viewer.layers[layer_names['tracks']].scale,
+                           'image_layer_shape': self.viewer.layers[layer_names['image']].data.shape,
+                           'tracks_layer_data': self.viewer.layers[layer_names['tracks']].data,
+                           'tracks_layer_props': self.viewer.layers[layer_names['tracks']].properties,
                            },
                 'parameters': {'track_id': track_id,
                                'microns_per_pixel': self._convert_to_float(
@@ -324,8 +382,13 @@ class GEMspaAnalyzeWidget(GEMspaWidget):
                                    self._input_values['Max time lag for fit (frames)'].text()),
                                'batch': self._batch_check.isChecked(),
                                'error_term_fit': self._error_term_fit_check.isChecked(),
-                               'color_by': self._color_by_combo.currentText()
                                },
+                'color_by': color_by,
+                'color_by_min_max': {'D': [self._convert_to_float(self._color_by_min_D_input.text()),
+                                           self._convert_to_float(self._color_by_max_D_input.text())],
+                                     'a': [self._convert_to_float(self._color_by_min_alpha_input.text()),
+                                           self._convert_to_float(self._color_by_max_alpha_input.text())]
+                                     }
                 }
 
     def update_data(self, out_dict):
@@ -337,8 +400,9 @@ class GEMspaAnalyzeWidget(GEMspaWidget):
             df = out_dict['df']
 
             if out_dict['batch']:
+
                 # Add layer if run in batch mode
-                kwargs = {'scale': out_dict['scale'],
+                kwargs = {'scale': out_dict['tracks_layer_scale'],
                           'blending': 'translucent',
                           'tail_length': df['frame'].max(),
                           'name': 'Analyzed tracks'}
@@ -346,10 +410,21 @@ class GEMspaAnalyzeWidget(GEMspaWidget):
                 layer = self._add_napari_layer("tracks", df, **kwargs)
                 title = layer.name
 
-                # Show full rainbow tracks plot (by track id)
-                plots_viewer = self._new_plots_viewer(title, figsize=(6, 6), close_last=False)
-                plots_viewer.plot_rainbow_tracks(df, out_dict['color_by'])
-                plots_viewer.show()
+                # Show full rainbow tracks plot for each type requested
+                img_shape = out_dict['image_layer_shape'][1:]  # assume first dimension of image shape is frame
+                aspect_ratio = img_shape[0] / img_shape[1]
+                color_by = out_dict['color_by']
+                for key in color_by.keys():
+                    if color_by[key]:
+                        col = self._columns_map[key]
+                        plots_viewer = self._new_plots_viewer(f"{title}: {key}", figsize=(6, 6 * aspect_ratio), close_last=False)
+                        if col in out_dict['color_by_min_max']:
+                            color_range = out_dict['color_by_min_max'][col]
+                            print(f"Min/Max for {col} = {color_range[0]}/{color_range[1]}")
+                        else:
+                            color_range = None
+                        plots_viewer.plot_rainbow_tracks(df, img_shape, col, color_range)
+                        plots_viewer.show()
             else:
                 title = "Analyzed track"
 

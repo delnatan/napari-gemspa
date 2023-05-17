@@ -189,25 +189,26 @@ class GEMspaPlugin(QWidget):
         if self.selected_widget.check_inputs():
             if self.selected_widget.name == 'GEMspaLocateWidget':
                 if self.image_layer_widget.num_layers() > 0:
-                    self.selected_widget.start_task(self.image_layer_widget.layer_name(),
+                    self.selected_widget.start_task({'image': self.image_layer_widget.layer_name()},
                                                     self.log_widget)
                 else:
                     self.selected_widget.show_error('No Image layers.')
             elif self.selected_widget.name == 'GEMspaLinkWidget':
                 if self.points_layer_widget.num_layers() > 0:
-                    self.selected_widget.start_task(self.points_layer_widget.layer_name(),
+                    self.selected_widget.start_task({'points': self.points_layer_widget.layer_name()},
                                                     self.log_widget)
                 else:
                     self.selected_widget.show_error('No Points layers.')
             elif self.selected_widget.name == 'GEMspaFilterLinksWidget':
                 if self.tracks_layer_widget.num_layers() > 0:
-                    self.selected_widget.start_task(self.tracks_layer_widget.layer_name(),
+                    self.selected_widget.start_task({'tracks': self.tracks_layer_widget.layer_name()},
                                                     self.log_widget)
                 else:
                     self.selected_widget.show_error('No Tracks layers.')
             elif self.selected_widget.name == 'GEMspaAnalyzeWidget':
-                if self.tracks_layer_widget.num_layers() > 0:
-                    self.selected_widget.start_task(self.tracks_layer_widget.layer_name(),
+                if self.tracks_layer_widget.num_layers() > 0 and self.image_layer_widget.num_layers() > 0:
+                    self.selected_widget.start_task({'tracks': self.tracks_layer_widget.layer_name(),
+                                                     'image': self.image_layer_widget.layer_name()},
                                                     self.log_widget)
                 else:
                     self.selected_widget.show_error('No Tracks layers.')

@@ -87,17 +87,17 @@ class GEMspaLinkWidget(GEMspaWidget):
 
         self.init_ui()
 
-    def start_task(self, layer_name, log_widget):
+    def start_task(self, layer_names, log_widget):
         # initialize worker and start task
         self.worker = GEMspaLinkWorker()
-        super().start_task(layer_name, log_widget)
+        super().start_task(layer_names, log_widget)
 
-    def state(self, layer_name) -> dict:
+    def state(self, layer_names) -> dict:
         return {'name': self.name,
-                'inputs': {'points_layer_name': layer_name,
-                           'points_layer_data': self.viewer.layers[layer_name].data,
-                           'points_layer_scale': self.viewer.layers[layer_name].scale,
-                           'points_layer_props': self.viewer.layers[layer_name].properties
+                'inputs': {'points_layer_name': layer_names['points'],
+                           'points_layer_data': self.viewer.layers[layer_names['points']].data,
+                           'points_layer_scale': self.viewer.layers[layer_names['points']].scale,
+                           'points_layer_props': self.viewer.layers[layer_names['points']].properties
                            },
                 'parameters': {'search_range': self._convert_to_float(self._input_values['Link range'].text()),
                                'memory': self._convert_to_int(self._input_values['Memory'].text()),

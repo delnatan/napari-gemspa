@@ -1,7 +1,7 @@
 import napari
 import pandas as pd
 import numpy as np
-from matplotlib import cm
+import matplotlib as mpl
 from qtpy.QtCore import Qt, QCoreApplication, QRect
 from qtpy.QtWidgets import (QWidget, QApplication, QVBoxLayout,
                             QTableWidget, QAbstractItemView, QTableWidgetItem,
@@ -84,25 +84,86 @@ class GEMspaPlottingWindow(QMainWindow):
 
         self.canvas.figure.tight_layout()
 
-    def plot_rainbow_tracks(self, df, color_by="track_id"):
+    def plot_rainbow_tracks(self, df, img_shape=None, color_by="track_id", color_range=None):
         self.canvas.figure.clear()
         ax = self.canvas.figure.subplots(1, 1)
-        max_D = df['D'].max()
-        max_y = df['y'].max()
+
+        if color_range is not None:
+            min_val = color_range[0]
+            max_val = color_range[1]
+
+            if max_val < min_val:
+                print("Rainbow tracks: Max/Min are invalid, using defaults...")
+                color_range = None
+
+        if color_range is None:
+            min_val = 0
+            if color_by in ['step_size', 'frame']:
+                max_val = df[color_by].max()
+            elif color_by == "D":
+                max_val = 2
+            elif color_by == "a":
+                max_val = 2
+            elif color_by == "r_sq (lin)":
+                max_val = 1
+
+        if img_shape is not None:
+            max_y = img_shape[0]
+        else:
+            max_y = df['y'].max()
+
+        def get_color(v):
+            if v < min_val:
+                v = min_val
+            if v > max_val:
+                v = max_val
+            return (v - min_val) / (max_val - min_val)
 
         # Plot all tracks
         for group in df.groupby('track_id'):
-            if color_by == 'Track id':
-                ax.plot(group[1]['x'], max_y-group[1]['y'], '-')
+            track_data = group[1]
+            if color_by == 'track_id':
+                ax.plot(track_data['x'], track_data['y'], '-')
+            elif color_by in ['D', 'a', 'r_sq (lin)']:
+                val = track_data.iloc[0][color_by]
+                if not np.isnan(val):
+                    ax.plot(track_data['x'], track_data['y'],
+                            '-', color=mpl.cm.jet(get_color(val)))
+            elif color_by in ['step_size', 'frame']:
+                for step_i in range(1, len(track_data), 1):
+                    val = track_data.iloc[step_i][color_by]
+                    if not np.isnan(val):
+                        ax.plot([track_data.iloc[step_i-1]['x'], track_data.iloc[step_i]['x']],
+                                [track_data.iloc[step_i-1]['y'], track_data.iloc[step_i]['y']],
+                                '-', color=mpl.cm.jet(get_color(val)))
+            elif color_by == "t":
+                max_val = len(track_data)
+                for step_i in range(1, max_val, 1):
+                    show_color = step_i / max_val
+                    ax.plot([track_data.iloc[step_i - 1]['x'], track_data.iloc[step_i]['x']],
+                            [track_data.iloc[step_i - 1]['y'], track_data.iloc[step_i]['y']],
+                            '-', color=mpl.cm.jet(show_color))
             else:
-                if color_by == "Diffusion coefficient (D)":
-                    D = group[1].iloc[0]['D']
-                    if not np.isnan(D):
-                        show_color = D / max_D
-                        ax.plot(group[1]['x'], max_y-group[1]['y'], '-', color=cm.jet(show_color))
-                else:
-                    # TODO
-                    ax.plot(group[1]['x'], max_y-group[1]['y'], '-')  
+                print("Rainbow tracks: Unknown color_by option, using track_id...")
+                ax.plot(group[1]['x'], group[1]['y'], '-')
+
+        if img_shape is not None and len(img_shape) > 1:
+            ax.set_xlim(0, img_shape[1])
+            ax.set_ylim(0, img_shape[0])
+
+        ax.set_ylim(max_y, 0)
+
+        if color_by != 'track_id':
+            if color_by == 't':
+                norm = mpl.colors.Normalize(vmin=0, vmax=1)
+                cmap = mpl.cm.ScalarMappable(norm=norm, cmap='jet')
+                cbar = self.canvas.figure.colorbar(cmap)
+                cbar.set_ticks([0, 1])
+                cbar.set_ticklabels(['Start', 'End'])
+            else:
+                norm = mpl.colors.Normalize(vmin=min_val, vmax=max_val)
+                cmap = mpl.cm.ScalarMappable(norm=norm, cmap='jet')
+                cbar = self.canvas.figure.colorbar(cmap)
 
         self.canvas.figure.tight_layout()
 
