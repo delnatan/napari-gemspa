@@ -156,14 +156,14 @@ class GEMspaWidget(QWidget):
         else:
             return None
 
-    def _new_plots_viewer(self, title='Plot view', close_last=True):
+    def _new_plots_viewer(self, title='Plot view', figsize=(8, 3), close_last=True):
         if close_last and len(self.plots_viewers) >= 1:
             viewer = self.plots_viewers.pop()
             viewer.close()
             viewer.deleteLater()
 
         i = len(self.plots_viewers)
-        self.plots_viewers.append(GEMspaPlottingWindow(self.viewer))
+        self.plots_viewers.append(GEMspaPlottingWindow(self.viewer, figsize=figsize))
         self.plots_viewers[i].setWindowTitle(title)
         return self.plots_viewers[i]
 

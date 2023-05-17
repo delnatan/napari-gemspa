@@ -1,6 +1,7 @@
 import napari
 import pandas as pd
 import numpy as np
+from matplotlib import cm
 from qtpy.QtCore import Qt, QCoreApplication, QRect
 from qtpy.QtWidgets import (QWidget, QApplication, QVBoxLayout,
                             QTableWidget, QAbstractItemView, QTableWidgetItem,
@@ -16,7 +17,7 @@ from matplotlib.figure import Figure
 class GEMspaPlottingWindow(QMainWindow):
     """Main window for showing plots"""
 
-    def __init__(self, napari_viewer, figsize=(5, 3), *args, **kwargs):
+    def __init__(self, napari_viewer, figsize=(8, 3), *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         self.viewer = napari_viewer
@@ -83,21 +84,35 @@ class GEMspaPlottingWindow(QMainWindow):
 
         self.canvas.figure.tight_layout()
 
-    def plot_rainbow_tracks(self, df):
+    def plot_rainbow_tracks(self, df, color_by="track_id"):
         self.canvas.figure.clear()
         ax = self.canvas.figure.subplots(1, 1)
+        max_D = df['D'].max()
+        max_y = df['y'].max()
 
         # Plot all tracks
         for group in df.groupby('track_id'):
-            ax.plot(group['x'], group['y'], '-')
+            if color_by == 'Track id':
+                ax.plot(group[1]['x'], max_y-group[1]['y'], '-')
+            else:
+                if color_by == "Diffusion coefficient (D)":
+                    D = group[1].iloc[0]['D']
+                    if not np.isnan(D):
+                        show_color = D / max_D
+                        ax.plot(group[1]['x'], max_y-group[1]['y'], '-', color=cm.jet(show_color))
+                else:
+                    # TODO
+                    ax.plot(group[1]['x'], max_y-group[1]['y'], '-')  
+
         self.canvas.figure.tight_layout()
 
-    def plot_analyze_results(self, plot_data):
+    def plot_analyze_results(self, out_data):
 
         summary_table = QTableWidget()
         self.verticalLayout.addWidget(summary_table)
 
-        if 'ens_fit_results' in plot_data and 'ens_msd' in plot_data:
+        if 'ens_fit_results' in out_data['summary_data'] and 'ens_msd' in out_data['summary_data']:
+            plot_data = out_data['summary_data']
 
             msd = plot_data['ens_msd']
             df = plot_data['ens_fit_results']
@@ -121,8 +136,9 @@ class GEMspaPlottingWindow(QMainWindow):
             axs[0].set_title(f"ens-avg MSD (2d)\nD = {D} " + r"$\mu m^{2}$/s")
             axs[1].set_title(f"ens-avg log-log MSD (2d)\n" + r"$\alpha$ = " + f"{alpha}")
 
-        elif 'fit_results' in plot_data and 'msd' in plot_data:
+        elif 'fit_results' in out_data['summary_data'] and 'msd' in out_data['summary_data']:
 
+            plot_data = out_data['summary_data']
             msd = plot_data['msd']
             df = plot_data['fit_results']
             df = df.round({'D': 4, 'E': 4, 'r_sq (lin)': 2, 'K': 4, 'a': 4, 'r_sq (log)': 2})
@@ -136,7 +152,7 @@ class GEMspaPlottingWindow(QMainWindow):
 
             # Make plots (MSD of track, with fit line, linear and loglog scale)
             self.canvas.figure.clear()
-            axs = self.canvas.figure.subplots(1, 2)
+            axs = self.canvas.figure.subplots(1, 3)
             axs[0].scatter(msd[:, 0], msd[:, 1])
             axs[1].scatter(msd[:, 0], msd[:, 1])
             axs[1].set_xscale('log', base=10)
@@ -145,6 +161,17 @@ class GEMspaPlottingWindow(QMainWindow):
             axs[1].set(xlabel=r'$log_{10}$ $\tau$ $(s)$', ylabel=r'$log_{10}$ $MSD$ ($\mu m^{2}$)')
             axs[0].set_title(f'track {track_id} MSD (2d)\nD = {D} ' + r'$\mu m^{2}$/s')
             axs[1].set_title(f'track {track_id} log-log MSD (2d)\n' + r'$\alpha$ = ' + f'{alpha}')
+
+            # Make plot of the track itself...
+            df = out_data['df']
+            x_min = df['x'].min()
+            y_min = df['y'].min()
+
+            axs[2].plot(df['x']-x_min, df['y']-y_min)
+            axs[2].plot(df.iloc[0]['x']-x_min, df.iloc[0]['y']-y_min, '.', color='green')
+            axs[2].plot(df.iloc[-1]['x']-x_min, df.iloc[-1]['y']-y_min, '.', color='red')
+            axs[2].set_title(f"track {track_id}")
+            axs[2].set(xlabel="x", ylabel="y")
 
         self.canvas.figure.tight_layout()
 

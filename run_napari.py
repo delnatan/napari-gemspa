@@ -3,6 +3,7 @@ import os
 from skimage import io
 from napari_gemspa import napari_get_reader
 
+
 def create_viewer():
     # create a new napari viewer object
     viewer = napari.Viewer()
