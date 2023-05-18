@@ -201,7 +201,6 @@ class GEMspaAnalyzeWorker(GEMspaWorker):
                 out_data = {'df': track_data,
                             'summary_data': summary_data,
                             'batch': batch,
-                            'display': state['display'],
                             }
             else:
                 self.log.emit(f"Track id {track_id} not found.")
@@ -234,7 +233,7 @@ class GEMspaAnalyzeWidget(GEMspaWidget):
         self._columns_map = {"Track id": "track_id",
                              "Diffusion coefficient (D)": "D",
                              "Anomalous exponent (alpha)": "a",
-                             "Step size": "step_size",
+                             "Step size (microns)": "step_size",
                              "Goodness-of-fit for D (R-sq)": "r_sq (lin)",
                              "Time (from movie start)": "frame",
                              "Time (from track start)": "t"
