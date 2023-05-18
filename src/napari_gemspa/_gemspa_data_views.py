@@ -69,7 +69,7 @@ class GEMspaPlottingWindow(QMainWindow):
     def plot_link_results(self, df):
 
         self.canvas.figure.clear()
-        axs = self.canvas.figure.subplots(1, 2)
+        axs = self.canvas.figure.subplots(1, 3)
 
         # Show plots of mass vs. size and mass vs. eccentricity
         mean_t = df.groupby('track_id').mean()
@@ -81,6 +81,13 @@ class GEMspaPlottingWindow(QMainWindow):
         axs[1].plot(mean_t['mass'], mean_t['ecc'], 'ko', alpha=0.3)
         axs[1].set(xlabel='mass', ylabel='eccentricity (0=circular)')
         axs[1].set_title('mass vs eccentricity')
+
+        # Show track length histogram
+        track_lengths = df['track_id'].value_counts(sort=False)
+
+        axs[2].hist(track_lengths, bins=range(0, track_lengths.max()+1, 1)) #, histtype='step')
+        axs[2].set(xlabel='track length', ylabel='counts')
+        axs[2].set_title('Track lengths histogram')
 
         self.canvas.figure.tight_layout()
 
