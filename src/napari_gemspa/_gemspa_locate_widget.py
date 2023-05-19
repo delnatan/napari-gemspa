@@ -112,17 +112,17 @@ class GEMspaLocateWidget(GEMspaWidget):
         layout.addStretch()
         self.setLayout(layout)
 
-    def start_task(self, layer_name, log_widget):
+    def start_task(self, layer_names, log_widget):
         # initialize worker and start task
         self.worker = GEMspaLocateWorker()
-        super().start_task(layer_name, log_widget)
+        super().start_task(layer_names, log_widget)
 
-    def state(self, layer_name) -> dict:
+    def state(self, layer_names) -> dict:
 
         return {'name': self.name,
-                'inputs': {'image_layer_name': layer_name,
-                           'image_layer_data': self.viewer.layers[layer_name].data,
-                           'image_layer_scale': self.viewer.layers[layer_name].scale,
+                'inputs': {'image_layer_name': layer_names['image'],
+                           'image_layer_data': self.viewer.layers[layer_names['image']].data,
+                           'image_layer_scale': self.viewer.layers[layer_names['image']].scale,
                            'frame': self.viewer.dims.current_step[0]
                            },
                 'parameters': {'diameter': self._convert_to_float(self._input_values['Diameter'].text()),

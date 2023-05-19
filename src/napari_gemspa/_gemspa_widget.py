@@ -178,7 +178,7 @@ class GEMspaWidget(QWidget):
         self.properties_viewers[i].setWindowTitle(title)
         return self.properties_viewers[i]
 
-    def start_task(self, layer_name, log_widget):
+    def start_task(self, layer_names, log_widget):
 
         # Perform startup tasks and start thread: worker must be initialized before this function is called
 
@@ -190,7 +190,7 @@ class GEMspaWidget(QWidget):
         self.worker.moveToThread(self.thread)
 
         # when thread is started, worker is run with the current state of the widget as input
-        self.thread.started.connect(lambda: self.worker.run(self.state(layer_name)))
+        self.thread.started.connect(lambda: self.worker.run(self.state(layer_names)))
 
         # when the worker sends update_data signal, update_data of the widget will execute to update the GUI
         self.worker.update_data.connect(self.update_data)
