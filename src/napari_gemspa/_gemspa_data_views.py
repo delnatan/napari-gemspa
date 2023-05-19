@@ -102,7 +102,7 @@ class GEMspaPlottingWindow(QMainWindow):
                         ax.plot(group[1]['x'], max_y-group[1]['y'], '-', color=cm.jet(show_color))
                 else:
                     # TODO
-                    ax.plot(group[1]['x'], max_y-group[1]['y'], '-')  
+                    ax.plot(group[1]['x'], max_y-group[1]['y'], '-')
 
         self.canvas.figure.tight_layout()
 
