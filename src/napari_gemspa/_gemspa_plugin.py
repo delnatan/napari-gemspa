@@ -2,6 +2,7 @@ from ._gemspa_locate_widget import GEMspaLocateWidget
 from ._gemspa_link_widget import GEMspaLinkWidget
 from ._gemspa_analyze_widget import GEMspaAnalyzeWidget
 from ._gemspa_filter_links_widget import GEMspaFilterLinksWidget
+from ._gemspa_file_import_widget import GEMspaFileImportWidget
 from ._gemspa_widget import GEMspaLogWidget
 from qtpy.QtWidgets import (QWidget, QLabel, QPushButton, QVBoxLayout, QTabWidget, QComboBox, QGridLayout)
 from qtpy import QtCore
@@ -13,7 +14,7 @@ import napari
 
 class GEMspaLayerInput(QWidget):
 
-    supported_layer_types = ['image', 'points', 'tracks']
+    supported_layer_types = ['image', 'points', 'tracks', 'labels']
 
     def __init__(self, napari_viewer, layer_type):
         super().__init__()
@@ -42,7 +43,8 @@ class GEMspaLayerInput(QWidget):
     def _is_layer_type_instance(self, layer):
         if ((self.layer_type == 'image' and isinstance(layer, napari.layers.image.image.Image)) or
                 (self.layer_type == 'points' and isinstance(layer, napari.layers.points.points.Points)) or
-                (self.layer_type == 'tracks' and isinstance(layer, napari.layers.tracks.tracks.Tracks))):
+                (self.layer_type == 'tracks' and isinstance(layer, napari.layers.tracks.tracks.Tracks)) or
+                (self.layer_type == 'labels' and isinstance(layer, napari.layers.labels.labels.Labels))):
             return True
         return False
 
@@ -96,6 +98,7 @@ class GEMspaPlugin(QWidget):
         self.image_layer_widget = None
         self.points_layer_widget = None
         self.tracks_layer_widget = None
+        self.labels_layer_widget = None
 
         self.selected_widget = None
         self.run_btn = None
@@ -125,9 +128,16 @@ class GEMspaPlugin(QWidget):
         self.tracks_layer_widget = GEMspaLayerInput(self.viewer, "tracks")
         layout.addWidget(self.tracks_layer_widget)
 
+        self.labels_layer_widget = GEMspaLayerInput(self.viewer, "labels")
+        layout.addWidget(self.labels_layer_widget)
+
         # Tab widget for switching between subwidgets
         self.main_tab = QTabWidget()
         layout.addWidget(self.main_tab)
+
+        # Subwidget 0 : Import a file
+        widget = GEMspaFileImportWidget(self.viewer)
+        self.main_tab.addTab(widget, "Import file")
 
         # Subwidget 1 : Localization
         widget = GEMspaLocateWidget(self.viewer)
@@ -155,8 +165,8 @@ class GEMspaPlugin(QWidget):
         layout.addWidget(self.log_widget)
 
         self.setLayout(layout)
-        self.main_tab.setCurrentIndex(0)
-        self.on_current_tab_changed(0)
+        self.main_tab.setCurrentIndex(1)
+        self.on_current_tab_changed(1)
 
         # Connects
         self.main_tab.currentChanged.connect(self.on_current_tab_changed)
@@ -169,28 +179,46 @@ class GEMspaPlugin(QWidget):
             self.image_layer_widget.setVisible(True)
             self.points_layer_widget.setVisible(False)
             self.tracks_layer_widget.setVisible(False)
+            self.labels_layer_widget.setVisible(True)
+            self.run_btn.setEnabled(True)
         elif self.selected_widget.name == 'GEMspaLinkWidget':
             self.image_layer_widget.setVisible(False)
             self.points_layer_widget.setVisible(True)
             self.tracks_layer_widget.setVisible(False)
+            self.labels_layer_widget.setVisible(True)
+            self.run_btn.setEnabled(True)
         elif self.selected_widget.name == 'GEMspaFilterLinksWidget':
             self.image_layer_widget.setVisible(False)
             self.points_layer_widget.setVisible(False)
             self.tracks_layer_widget.setVisible(True)
+            self.labels_layer_widget.setVisible(True)
+            self.run_btn.setEnabled(True)
         elif self.selected_widget.name == 'GEMspaAnalyzeWidget':
             self.image_layer_widget.setVisible(False)
             self.points_layer_widget.setVisible(False)
             self.tracks_layer_widget.setVisible(True)
+            self.labels_layer_widget.setVisible(False)
+            self.run_btn.setEnabled(True)
+        elif self.selected_widget.name == 'GEMspaFileImportWidget':
+            self.image_layer_widget.setVisible(False)
+            self.points_layer_widget.setVisible(False)
+            self.tracks_layer_widget.setVisible(False)
+            self.labels_layer_widget.setVisible(False)
+
+            # file import widget is not "executed" with the run button
+            self.run_btn.setEnabled(False)
         else:
             raise ValueError("Invalid widget name")
 
     def run(self):
+
         """Check inputs and start thread"""
         if self.selected_widget.check_inputs():
+            input_layers_dict = {}
             if self.selected_widget.name == 'GEMspaLocateWidget':
                 if self.image_layer_widget.num_layers() > 0:
-                    self.selected_widget.start_task({'image': self.image_layer_widget.layer_name()},
-                                                    self.log_widget)
+                    input_layers_dict['image'] = self.image_layer_widget.layer_name()
+                    self.selected_widget.start_task(input_layers_dict, self.log_widget)
                 else:
                     self.selected_widget.show_error('No Image layers.')
             elif self.selected_widget.name == 'GEMspaLinkWidget':

@@ -214,8 +214,8 @@ class GEMspaAnalyzeWidget(GEMspaWidget):
 
     name = "GEMspaAnalyzeWidget"
 
-    def __init__(self, napari_viewer):
-        super().__init__(napari_viewer)
+    def __init__(self, napari_viewer, title="Analyze tracks with GEMspa:"):
+        super().__init__(napari_viewer, title)
 
         self._batch_check = QCheckBox('Process all tracks')
         self._error_term_fit_check = QCheckBox('Fit with error term')
@@ -266,8 +266,12 @@ class GEMspaAnalyzeWidget(GEMspaWidget):
         grid_layout.setContentsMargins(0, 0, 0, 0)
         i = 0
 
+        if self.title is not None:
+            grid_layout.addWidget(QLabel(self.title), i, 0)
+            i += 1
+
         self._batch_check.setChecked(True)
-        grid_layout.addWidget(self._batch_check, 0, 0, 1, 2)
+        grid_layout.addWidget(self._batch_check, i, 0, 1, 2)
         i += 1
 
         for key in self._input_values.keys():

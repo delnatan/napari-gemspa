@@ -64,8 +64,8 @@ class GEMspaLocateWidget(GEMspaWidget):
 
     name = 'GEMspaLocateWidget'
 
-    def __init__(self, napari_viewer):
-        super().__init__(napari_viewer)
+    def __init__(self, napari_viewer, title="Locate features with trackpy:"):
+        super().__init__(napari_viewer, title)
 
         self._current_frame_check = QCheckBox('Process only current frame')
         self._invert_check = QCheckBox('Invert')
@@ -94,7 +94,11 @@ class GEMspaLocateWidget(GEMspaWidget):
         grid_layout.setContentsMargins(0, 0, 0, 0)
         i = 0
 
-        grid_layout.addWidget(self._current_frame_check, 0, 0, 1, 2)
+        if self.title is not None:
+            grid_layout.addWidget(QLabel(self.title), i, 0)
+            i += 1
+
+        grid_layout.addWidget(self._current_frame_check, i, 0, 1, 2)
         i += 1
 
         for key in self._input_values.keys():

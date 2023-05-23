@@ -41,27 +41,29 @@ class GEMspaLinkWorker(GEMspaWorker):
 
             # Make trackpy table from layer data
             f = self._make_trackpy_table("points", points_layer_data, points_layer_props)
+            if f is not None:
+                tp.quiet()  # trackpy to quiet mode
 
-            tp.quiet()  # trackpy to quiet mode
+                # perform linking
+                t = tp.link(f, search_range=search_range, memory=memory)
+                self.log.emit(f"Number of particles: {t['particle'].nunique()}")
 
-            # perform linking
-            t = tp.link(f, search_range=search_range, memory=memory)
-            self.log.emit(f"Number of particles: {t['particle'].nunique()}")
+                # Filter spurious trajectories
+                if min_frames is not None and min_frames > 1:
+                    t = tp.filter_stubs(t, threshold=min_frames)
+                    self.log.emit(f"After filter for Min frames, number of particles: {t['particle'].nunique()}")
 
-            # Filter spurious trajectories
-            if min_frames is not None and min_frames > 1:
-                t = tp.filter_stubs(t, threshold=min_frames)
-                self.log.emit(f"After filter for Min frames, number of particles: {t['particle'].nunique()}")
+                # emit the output data after sorting by track_id (particle) and frame (needed for tracks layer)
+                t.index.name = 'index'  # pandas complains when index name and column name are the same
+                t = t.sort_values(by=['particle', 'frame'], axis=0, ascending=True)
 
-            # emit the output data after sorting by track_id (particle) and frame (needed for tracks layer)
-            t.index.name = 'index'  # pandas complains when index name and column name are the same
-            t = t.sort_values(by=['particle', 'frame'], axis=0, ascending=True)
+                # change column name from 'particle' to 'track_id' to identify the track for consistency with napari
+                t.rename(columns={'particle': 'track_id'}, inplace=True)
 
-            # change column name from 'particle' to 'track_id' to identify the track for consistency with napari layer
-            t.rename(columns={'particle': 'track_id'}, inplace=True)
-
-            out_data = {'df': t,
-                        'scale': scale}
+                out_data = {'df': t,
+                            'scale': scale}
+            else:
+                self.log.emit(f"Error: The points layer properties do not contain the required columns for linking.")
         else:
             self.log.emit(f"The data does not have a dimension for linking.")
 
@@ -74,8 +76,8 @@ class GEMspaLinkWidget(GEMspaWidget):
 
     name = "GEMspaLinkWidget"
 
-    def __init__(self, napari_viewer):
-        super().__init__(napari_viewer)
+    def __init__(self, napari_viewer, title="Link features with trackpy:"):
+        super().__init__(napari_viewer, title)
 
         self._input_values = {'Link range': QLineEdit('5'),
                               'Memory': QLineEdit('0'),

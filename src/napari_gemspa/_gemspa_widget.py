@@ -24,6 +24,10 @@ class GEMspaWorker(QObject):
 
     @staticmethod
     def _make_trackpy_table(layer_type, data, props):
+        req_cols = ['mass', 'size', 'ecc', 'signal', 'raw_mass', 'ep']
+        for col in req_cols:
+            if col not in props.keys():
+                return None
         if layer_type == 'points':
             df = pd.DataFrame()
             if data.shape[1] == 2:
@@ -39,7 +43,6 @@ class GEMspaWorker(QObject):
             df['x'] = data[:, i + 1]
             for col in props.keys():
                 df[col] = props[col]
-
         elif layer_type == 'tracks':
             df = pd.DataFrame()
             df['particle'] = data[:, 0]
@@ -72,10 +75,11 @@ class GEMspaWidget(QWidget):
 
     name = 'GEMspaWidget'
 
-    def __init__(self, napari_viewer):
+    def __init__(self, napari_viewer, title=None):
         super().__init__()
 
         self.viewer = napari_viewer
+        self.title = title
         self.thread = None
         self.worker = None
 
@@ -97,8 +101,12 @@ class GEMspaWidget(QWidget):
         # Set up the input GUI items
         grid_layout = QGridLayout()
         grid_layout.setContentsMargins(0, 0, 0, 0)
-
         i = 0
+
+        if self.title is not None:
+            grid_layout.addWidget(QLabel(self.title), i, 0)
+            i += 1
+
         for key in self._input_values.keys():
             grid_layout.addWidget(QLabel(key), i, 0)
             grid_layout.addWidget(self._input_values[key], i, 1)
