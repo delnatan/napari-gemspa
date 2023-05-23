@@ -95,12 +95,18 @@ class GEMspaLinkWidget(GEMspaWidget):
         super().start_task(layer_names, log_widget)
 
     def state(self, layer_names) -> dict:
+
+        inputs_dict = {'points_layer_name': layer_names['points'],
+                       'points_layer_data': self.viewer.layers[layer_names['points']].data,
+                       'points_layer_scale': self.viewer.layers[layer_names['points']].scale,
+                       'points_layer_props': self.viewer.layers[layer_names['points']].properties
+                       }
+        if 'labels' in layer_names:
+            inputs_dict['labels_layer_name'] = layer_names['labels']
+            inputs_dict['labels_layer_data'] = self.viewer.layers[layer_names['labels']].data
+
         return {'name': self.name,
-                'inputs': {'points_layer_name': layer_names['points'],
-                           'points_layer_data': self.viewer.layers[layer_names['points']].data,
-                           'points_layer_scale': self.viewer.layers[layer_names['points']].scale,
-                           'points_layer_props': self.viewer.layers[layer_names['points']].properties
-                           },
+                'inputs': inputs_dict,
                 'parameters': {'search_range': self._convert_to_float(self._input_values['Link range'].text()),
                                'memory': self._convert_to_int(self._input_values['Memory'].text()),
                                'min_frames': self._convert_to_int(self._input_values['Min frames'].text()),

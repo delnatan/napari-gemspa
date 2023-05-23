@@ -16,7 +16,7 @@ class GEMspaLayerInput(QWidget):
 
     supported_layer_types = ['image', 'points', 'tracks', 'labels']
 
-    def __init__(self, napari_viewer, layer_type):
+    def __init__(self, napari_viewer, layer_type="image", allow_none=False):
         super().__init__()
 
         if layer_type not in self.supported_layer_types:
@@ -24,6 +24,7 @@ class GEMspaLayerInput(QWidget):
 
         self.viewer = napari_viewer
         self.layer_type = layer_type
+        self.allow_none = allow_none
 
         layout = QGridLayout()
         layout.setContentsMargins(0, 0, 0, 0)
@@ -36,9 +37,13 @@ class GEMspaLayerInput(QWidget):
 
         self.viewer.layers.events.connect(self._on_layer_change)
 
+        if self.allow_none:
+            self._input_layer_box.addItem("")
+
         for layer in self.viewer.layers:
             if self._is_layer_type_instance(layer):
                 self._input_layer_box.addItem(layer.name)
+
 
     def _is_layer_type_instance(self, layer):
         if ((self.layer_type == 'image' and isinstance(layer, napari.layers.image.image.Image)) or
@@ -62,6 +67,10 @@ class GEMspaLayerInput(QWidget):
         self._input_layer_box.clear()
 
         still_here = False
+        if self.allow_none:
+            self._input_layer_box.addItem("")
+            if "" == current_text:
+                still_here = True
         for layer in self.viewer.layers:
             if self._is_layer_type_instance(layer):
                 self._input_layer_box.addItem(layer.name)
@@ -71,10 +80,16 @@ class GEMspaLayerInput(QWidget):
             self._input_layer_box.setCurrentText(current_text)
 
     def num_layers(self):
-        return self._input_layer_box.count()
+        if self.allow_none:
+            return self._input_layer_box.count()-1
+        else:
+            return self._input_layer_box.count()
 
     def layer_name(self):
-        return self._input_layer_box.currentText()
+        if self._input_layer_box.currentText():
+            return self._input_layer_box.currentText()
+        else:
+            return None
 
 
 class GEMspaPlugin(QWidget):
@@ -128,7 +143,8 @@ class GEMspaPlugin(QWidget):
         self.tracks_layer_widget = GEMspaLayerInput(self.viewer, "tracks")
         layout.addWidget(self.tracks_layer_widget)
 
-        self.labels_layer_widget = GEMspaLayerInput(self.viewer, "labels")
+        self.labels_layer_widget = GEMspaLayerInput(self.viewer, "labels",
+                                                    allow_none=True)
         layout.addWidget(self.labels_layer_widget)
 
         # Tab widget for switching between subwidgets
@@ -197,7 +213,7 @@ class GEMspaPlugin(QWidget):
             self.image_layer_widget.setVisible(False)
             self.points_layer_widget.setVisible(False)
             self.tracks_layer_widget.setVisible(True)
-            self.labels_layer_widget.setVisible(False)
+            self.labels_layer_widget.setVisible(True)
             self.run_btn.setEnabled(True)
         elif self.selected_widget.name == 'GEMspaFileImportWidget':
             self.image_layer_widget.setVisible(False)
@@ -214,34 +230,45 @@ class GEMspaPlugin(QWidget):
 
         """Check inputs and start thread"""
         if self.selected_widget.check_inputs():
-            input_layers_dict = {}
+
+            if self.labels_layer_widget.layer_name():
+                input_layers_dict = {'labels': self.labels_layer_widget.layer_name()}
+            else:
+                input_layers_dict = {}
+
+            missing_layers_error = ""
             if self.selected_widget.name == 'GEMspaLocateWidget':
                 if self.image_layer_widget.num_layers() > 0:
                     input_layers_dict['image'] = self.image_layer_widget.layer_name()
-                    self.selected_widget.start_task(input_layers_dict, self.log_widget)
                 else:
-                    self.selected_widget.show_error('No Image layers.')
+                    missing_layers_error = 'No Image layers.'
+
             elif self.selected_widget.name == 'GEMspaLinkWidget':
                 if self.points_layer_widget.num_layers() > 0:
-                    self.selected_widget.start_task({'points': self.points_layer_widget.layer_name()},
-                                                    self.log_widget)
+                    input_layers_dict['points'] = self.points_layer_widget.layer_name()
                 else:
-                    self.selected_widget.show_error('No Points layers.')
+                    missing_layers_error = 'No Points layers.'
+
             elif self.selected_widget.name == 'GEMspaFilterLinksWidget':
                 if self.tracks_layer_widget.num_layers() > 0:
-                    self.selected_widget.start_task({'tracks': self.tracks_layer_widget.layer_name()},
-                                                    self.log_widget)
+                    input_layers_dict['tracks'] = self.tracks_layer_widget.layer_name()
                 else:
-                    self.selected_widget.show_error('No Tracks layers.')
+                    missing_layers_error = 'No Tracks layers.'
+
             elif self.selected_widget.name == 'GEMspaAnalyzeWidget':
                 if self.tracks_layer_widget.num_layers() > 0 and self.image_layer_widget.num_layers() > 0:
-                    self.selected_widget.start_task({'tracks': self.tracks_layer_widget.layer_name(),
-                                                     'image': self.image_layer_widget.layer_name()},
-                                                    self.log_widget)
+                    input_layers_dict['tracks'] = self.tracks_layer_widget.layer_name()
+                    input_layers_dict['image'] = self.image_layer_widget.layer_name()
                 else:
-                    self.selected_widget.show_error('No Tracks layers.')
+                    missing_layers_error = 'No Tracks/Image layers.'
+
             else:
                 raise ValueError("Invalid widget name")
+
+            if missing_layers_error:
+                self.selected_widget.show_error(missing_layers_error)
+            else:
+                self.selected_widget.start_task(input_layers_dict, self.log_widget)
 
 
 

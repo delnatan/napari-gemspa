@@ -113,12 +113,18 @@ class GEMspaFilterLinksWidget(GEMspaWidget):
         super().start_task(layer_names, log_widget)
 
     def state(self, layer_names) -> dict:
+
+        inputs_dict = {'tracks_layer_name': layer_names['tracks'],
+                       'tracks_layer_data': self.viewer.layers[layer_names['tracks']].data,
+                       'tracks_layer_scale': self.viewer.layers[layer_names['tracks']].scale,
+                       'tracks_layer_props': self.viewer.layers[layer_names['tracks']].properties
+                       }
+        if 'labels' in layer_names:
+            inputs_dict['labels_layer_name'] = layer_names['labels']
+            inputs_dict['labels_layer_data'] = self.viewer.layers[layer_names['labels']].data
+
         return {'name': self.name,
-                'inputs': {'tracks_layer_name': layer_names['tracks'],
-                           'tracks_layer_data': self.viewer.layers[layer_names['tracks']].data,
-                           'tracks_layer_scale': self.viewer.layers[layer_names['tracks']].scale,
-                           'tracks_layer_props': self.viewer.layers[layer_names['tracks']].properties
-                           },
+                'inputs': inputs_dict,
                 'parameters': {'min_frames': self._convert_to_int(self._input_values['Min frames'].text()),
                                'min_mass': self._convert_to_float(self._input_values['Min mass'].text()),
                                'max_mass': self._convert_to_float(self._input_values['Max mass'].text()),

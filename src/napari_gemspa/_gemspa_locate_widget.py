@@ -51,6 +51,19 @@ class GEMspaLocateWorker(GEMspaWorker):
         if 'frame' not in f.columns:
             f['frame'] = t
 
+        # if labels layer was chosen, remove all points that are outside labeled regions
+        # if 'labels_layer_data' in input_params:
+        #     labeled_mask = input_params['labels_layer_data']
+        #     if len(labeled_mask.shape) == 2:
+        #         labeled_mask
+        #     drop_idx = []
+        #     for row in f.iterrows():
+        #         if not labeled_mask[int(row[1]['frame'])][int(row[1]['y'])][int(row[1]['x'])]:
+        #             drop_idx.append(row[0])
+        #     f.drop(drop_idx, axis=0, inplace=True)
+
+
+
         out_data = {'df': f,
                     'scale': scale,
                     'diameter': diameter}
@@ -123,12 +136,17 @@ class GEMspaLocateWidget(GEMspaWidget):
 
     def state(self, layer_names) -> dict:
 
+        inputs_dict = {'image_layer_name': layer_names['image'],
+                       'image_layer_data': self.viewer.layers[layer_names['image']].data,
+                       'image_layer_scale': self.viewer.layers[layer_names['image']].scale,
+                       'frame': self.viewer.dims.current_step[0]
+                       }
+        if 'labels' in layer_names:
+            inputs_dict['labels_layer_name'] = layer_names['labels']
+            inputs_dict['labels_layer_data'] = self.viewer.layers[layer_names['labels']].data
+
         return {'name': self.name,
-                'inputs': {'image_layer_name': layer_names['image'],
-                           'image_layer_data': self.viewer.layers[layer_names['image']].data,
-                           'image_layer_scale': self.viewer.layers[layer_names['image']].scale,
-                           'frame': self.viewer.dims.current_step[0]
-                           },
+                'inputs': inputs_dict,
                 'parameters': {'diameter': self._convert_to_float(self._input_values['Diameter'].text()),
                                'minmass': self._convert_to_float(self._input_values['Min mass'].text()),
                                'maxsize': self._convert_to_float(self._input_values['Max size'].text()),

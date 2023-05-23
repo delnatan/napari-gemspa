@@ -358,6 +358,17 @@ class GEMspaAnalyzeWidget(GEMspaWidget):
         return valid
 
     def state(self, layer_names) -> dict:
+
+        inputs_dict = {'tracks_layer_name': layer_names['tracks'],
+                       'tracks_layer_scale': self.viewer.layers[layer_names['tracks']].scale,
+                       'image_layer_shape': self.viewer.layers[layer_names['image']].data.shape,
+                       'tracks_layer_data': self.viewer.layers[layer_names['tracks']].data,
+                       'tracks_layer_props': self.viewer.layers[layer_names['tracks']].properties
+                       }
+        if 'labels' in layer_names:
+            inputs_dict['labels_layer_name'] = layer_names['labels']
+            inputs_dict['labels_layer_data'] = self.viewer.layers[layer_names['labels']].data
+
         if self._batch_check.isChecked():
             track_id = None
         else:
@@ -368,12 +379,7 @@ class GEMspaAnalyzeWidget(GEMspaWidget):
             color_by[check_box.text()] = check_box.isChecked()
 
         return {'name': self.name,
-                'inputs': {'tracks_layer_name': layer_names['tracks'],
-                           'tracks_layer_scale': self.viewer.layers[layer_names['tracks']].scale,
-                           'image_layer_shape': self.viewer.layers[layer_names['image']].data.shape,
-                           'tracks_layer_data': self.viewer.layers[layer_names['tracks']].data,
-                           'tracks_layer_props': self.viewer.layers[layer_names['tracks']].properties,
-                           },
+                'inputs': inputs_dict,
                 'parameters': {'track_id': track_id,
                                'microns_per_pixel': self._convert_to_float(
                                    self._input_values['Microns per px'].text()),
