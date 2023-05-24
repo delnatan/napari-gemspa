@@ -1,6 +1,12 @@
-from qtpy.QtWidgets import (QGridLayout, QVBoxLayout, QFileDialog, QRadioButton, QPushButton, QWidget, QLabel)
+from qtpy.QtWidgets import (QGridLayout, QVBoxLayout, QFileDialog, QRadioButton, QPushButton, QWidget,
+                            QLabel, QGroupBox)
+from ._utils import show_error
 import os
 import pandas as pd
+import nd2
+from skimage import io
+import napari
+import numpy as np
 
 """Defines: GEMspaFileImport, GEMspaFileImportWidget"""
 
@@ -84,13 +90,16 @@ class GEMspaFileImportWidget(QWidget):
 
         self.viewer = napari_viewer
 
-        self._format_rbs = [QRadioButton("GEMspa", self),
-                            QRadioButton("Mosaic", self),
-                            QRadioButton("Trackmate", self),
-                            QRadioButton("Trackpy", self)
-                            ]
+        self._track_file_format_rbs = [QRadioButton("GEMspa", self),
+                                       QRadioButton("Mosaic", self),
+                                       QRadioButton("Trackmate", self),
+                                       QRadioButton("Trackpy", self)
+                                       ]
 
-        self._open_file_btn = QPushButton("Open file...", self)
+        self._open_tracks_file_btn = QPushButton("Open file...", self)
+        self._open_image_file_btn = QPushButton("Open file...", self)
+        self._open_labels_file_btn = QPushButton("Open file...", self)
+        self._new_labels_layer_btn = QPushButton("Add layer", self)
 
         self.init_ui()
 
@@ -98,33 +107,94 @@ class GEMspaFileImportWidget(QWidget):
 
         layout = QVBoxLayout()
 
-        grid_layout = QGridLayout()
-        grid_layout.setContentsMargins(0, 0, 0, 0)
-        i = 0
+        group = QGroupBox("Add image layer")
+        group_layout = QVBoxLayout()
+        group_layout.addWidget(QLabel("Open image file (nd2/tif time-lapse movie):"))
+        group_layout.addWidget(self._open_image_file_btn)
+        group.setLayout(group_layout)
+        layout.addWidget(group)
 
-        grid_layout.addWidget(QLabel("Select file type:"), i, 0)
-        i += 1
+        group = QGroupBox("Add labels layer")
+        group_layout = QGridLayout()
+        group_layout.addWidget(QLabel("Create blank 2D labels layer for selected image:"), 0, 0)
+        group_layout.addWidget(self._new_labels_layer_btn, 0, 1)
+        group_layout.addWidget(QLabel("Open labels file:"), 1, 0)
+        group_layout.addWidget(self._open_labels_file_btn, 1, 1)
+        group.setLayout(group_layout)
+        layout.addWidget(group)
 
-        for rb in self._format_rbs:
-            grid_layout.addWidget(rb, i, 0)
-            i += 1
+        group = QGroupBox("Add tracks layer")
+        group_layout = QVBoxLayout()
+        for rb in self._track_file_format_rbs:
+            group_layout.addWidget(rb)
+        group_layout.addWidget(self._open_tracks_file_btn)
+        group.setLayout(group_layout)
+        layout.addWidget(group)
 
-        grid_layout.addWidget(self._open_file_btn, i, 0)
-        i += 1
-
-        layout.addLayout(grid_layout)
         layout.addStretch()
 
-        self._open_file_btn.clicked.connect(self._load_file)
-        self._format_rbs[0].setChecked(True)
+        self._track_file_format_rbs[0].setChecked(True)
+        self._open_tracks_file_btn.clicked.connect(self._load_tracks_file)
+        self._open_image_file_btn.clicked.connect(self._load_image_file)
+        self._open_labels_file_btn.clicked.connect(self._load_labels_file)
+        self._new_labels_layer_btn.clicked.connect(self._new_labels_layer)
 
         self.setLayout(layout)
 
-    def _load_file(self):
+    def _new_labels_layer(self):
+        # create blank image same x/y dimensions as selected image layer
+        # if image layer has other dimensions, ignore
+        # add as a labels layer
+        selected_layers = self.viewer.layers.selection
 
-        fname = QFileDialog.getOpenFileName(self,
-                                            "Tab-delimited Text Files (*.txt);;Tab-delimited Text Files (*.tsv);;CSV Files (*.csv);;All Files (*)")
-        if fname[0]:
+        found_image = False
+        if len(selected_layers) > 0:
+            for layer in selected_layers:
+                if isinstance(layer, napari.layers.image.image.Image):
+                    # get final 2 image dimensions and create mask
+                    dims = layer.data.shape[-2:]
+                    new_mask = np.zeros(dims, dtype='int64')
+                    self.viewer.add_labels(new_mask)
+                    found_image = True
+                    break
+
+        if not found_image:
+            show_error("Cannot create labels layer: no selected image layer found.")
+
+    def _load_image_file(self):
+        filename, _ = QFileDialog.getOpenFileName(
+            self,
+            "time-lapse movies (*.tif *.tiff *.nd2)"
+        )
+        if filename:
+            ext = os.path.splitext(filename)[1]
+            if ext == ".nd2":
+                f = nd2.ND2File(filename)
+                images = f.asarray()
+                f.close()
+            elif ext == '.tif' or ext == '.tiff':
+                images = io.imread(filename)
+            else:
+                raise ValueError(f"Unrecognized file extension for image file {ext}")
+
+            self.viewer.add_image(images, name=os.path.split(filename)[1])
+
+    def _load_labels_file(self):
+        filename, _ = QFileDialog.getOpenFileName(
+            self,
+            "images with integer labels (*.png *.jpg *.jpeg *.bmp *.gif *.tif *.tiff *.jp2)"
+        )
+        if filename:
+            labeled_image = io.imread(filename)
+            self.viewer.add_labels(labeled_image, name=os.path.split(filename)[1])
+
+    def _load_tracks_file(self):
+
+        filename, _ = QFileDialog.getOpenFileName(
+            self,
+            "tab or comma delimited text files (*.txt *.tsv *.csv)"
+        )
+        if filename:
 
             # Get selected format for imported file
             data_format = self._format_rbs[0].text()
@@ -134,7 +204,7 @@ class GEMspaFileImportWidget(QWidget):
                     break
             data_format = data_format.lower()
 
-            file_import = GEMspaFileImport(fname[0], data_format)
+            file_import = GEMspaFileImport(filename, data_format)
             layer_data = file_import.get_layer_data()
 
             # Add layer (points or tracks)

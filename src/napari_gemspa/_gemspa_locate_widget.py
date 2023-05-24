@@ -2,7 +2,7 @@ from ._gemspa_widget import GEMspaWidget, GEMspaWorker
 import trackpy as tp
 from qtpy.QtWidgets import (QGridLayout, QLabel, QLineEdit, QCheckBox, QVBoxLayout)
 from qtpy.QtCore import Slot
-from ._gemspa_data_views import GEMspaTableWindow, GEMspaPlottingWindow
+from ._utils import show_error, convert_to_float, convert_to_int, remove_outside_mask, fix_frame_limits
 
 
 """Defines: GEMspaLocateWidget, GEMspaLocateWorker"""
@@ -26,6 +26,12 @@ class GEMspaLocateWorker(GEMspaWorker):
         current_frame = state_params['current_frame']
         del state_params['current_frame']
 
+        frame_start = state_params['frame_start']
+        del state_params['frame_start']
+
+        frame_end = state_params['frame_end']
+        del state_params['frame_end']
+
         diameter = state_params['diameter']
         del state_params['diameter']
 
@@ -44,25 +50,25 @@ class GEMspaLocateWorker(GEMspaWorker):
             f = tp.locate(image[t], diameter, **state_params)
             self.log.emit(f"Processed frame {t}, number of particles: {len(f)}")
         else:
-            # process the entire movie - all frames
+            # process the entire movie - limited by frame start/end
+            frame_offset = 0
+            if len(image.shape) >= 3:
+                frame_start, frame_end = fix_frame_limits(frame_start, frame_end, len(image))
+                image = image[frame_start:frame_end+1]
+                frame_offset = frame_start
+
             f = tp.batch(image, diameter, **state_params)
+            f['frame'] = f['frame']+frame_offset
             self.log.emit(f"Processed {len(image)} frames, number of particles: {len(f)}")
 
         if 'frame' not in f.columns:
             f['frame'] = t
 
         # if labels layer was chosen, remove all points that are outside labeled regions
-        # if 'labels_layer_data' in input_params:
-        #     labeled_mask = input_params['labels_layer_data']
-        #     if len(labeled_mask.shape) == 2:
-        #         labeled_mask
-        #     drop_idx = []
-        #     for row in f.iterrows():
-        #         if not labeled_mask[int(row[1]['frame'])][int(row[1]['y'])][int(row[1]['x'])]:
-        #             drop_idx.append(row[0])
-        #     f.drop(drop_idx, axis=0, inplace=True)
-
-
+        if 'labels_layer_data' in input_params:
+            labeled_mask = input_params['labels_layer_data']
+            f = remove_outside_mask(f, labeled_mask)
+            self.log.emit(f"Removed particles outside of mask region, number of particles: {len(f)}")
 
         out_data = {'df': f,
                     'scale': scale,
@@ -84,7 +90,9 @@ class GEMspaLocateWidget(GEMspaWidget):
         self._invert_check = QCheckBox('Invert')
         self._preprocess_check = QCheckBox('Preprocess')
 
-        self._input_values = {'Diameter': QLineEdit('11'),
+        self._input_values = {'Frame start': QLineEdit(''),
+                              'Frame end': QLineEdit(''),
+                              'Diameter': QLineEdit('11'),
                               'Min mass': QLineEdit('125'),
                               'Max size': QLineEdit(''),
                               'Separation': QLineEdit(''),
@@ -147,15 +155,17 @@ class GEMspaLocateWidget(GEMspaWidget):
 
         return {'name': self.name,
                 'inputs': inputs_dict,
-                'parameters': {'diameter': self._convert_to_float(self._input_values['Diameter'].text()),
-                               'minmass': self._convert_to_float(self._input_values['Min mass'].text()),
-                               'maxsize': self._convert_to_float(self._input_values['Max size'].text()),
-                               'separation': self._convert_to_float(self._input_values['Separation'].text()),
-                               'noise_size': self._convert_to_float(self._input_values['Noise size'].text()),
-                               'smoothing_size': self._convert_to_float(self._input_values['Smoothing size'].text()),
-                               'threshold': self._convert_to_float(self._input_values['Threshold'].text()),
-                               'percentile': self._convert_to_float(self._input_values['Percentile'].text()),
-                               'topn': self._convert_to_float(self._input_values['Top n'].text()),
+                'parameters': {'frame_start': convert_to_int(self._input_values['Frame start'].text()),
+                               'frame_end': convert_to_int(self._input_values['Frame end'].text()),
+                               'diameter': convert_to_float(self._input_values['Diameter'].text()),
+                               'minmass': convert_to_float(self._input_values['Min mass'].text()),
+                               'maxsize': convert_to_float(self._input_values['Max size'].text()),
+                               'separation': convert_to_float(self._input_values['Separation'].text()),
+                               'noise_size': convert_to_float(self._input_values['Noise size'].text()),
+                               'smoothing_size': convert_to_float(self._input_values['Smoothing size'].text()),
+                               'threshold': convert_to_float(self._input_values['Threshold'].text()),
+                               'percentile': convert_to_float(self._input_values['Percentile'].text()),
+                               'topn': convert_to_float(self._input_values['Top n'].text()),
                                'invert': self._invert_check.isChecked(),
                                'preprocess': self._preprocess_check.isChecked(),
                                'current_frame': self._current_frame_check.isChecked()
@@ -174,7 +184,7 @@ class GEMspaLocateWidget(GEMspaWidget):
             df = out_dict['df']
 
             if len(df) == 0:
-                self.show_error("No particles were located!")
+                show_error("No particles were located!")
             else:
                 layer = self._add_napari_layer("points", df, **kwargs)
 

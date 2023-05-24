@@ -1,8 +1,8 @@
-from qtpy.QtWidgets import (QWidget, QVBoxLayout, QTextEdit, QMessageBox, QGridLayout, QLabel)
+from qtpy.QtWidgets import (QWidget, QVBoxLayout, QTextEdit, QGridLayout, QLabel)
 from qtpy.QtCore import Signal, QObject, QThread
 from ._gemspa_data_views import GEMspaTableWindow, GEMspaPlottingWindow
 import pandas as pd
-
+from ._utils import show_error
 
 """Defines: GEMspaWidget, GEMspaWorker, GEMspaLogWidget"""
 
@@ -133,37 +133,6 @@ class GEMspaWidget(QWidget):
             viewer.close()
             viewer.deleteLater()
 
-    @staticmethod
-    def show_error(message):
-        """Display an error message in a QMessage box
-
-        Parameters
-        ----------
-        message: str
-            Error message
-
-        """
-        msg = QMessageBox()
-        msg.setIcon(QMessageBox.Critical)
-
-        msg.setText(message)
-        msg.setWindowTitle("GEMspa error")
-        msg.exec_()
-
-    @staticmethod
-    def _convert_to_float(value):
-        if value:
-            return float(value)
-        else:
-            return None
-
-    @staticmethod
-    def _convert_to_int(value):
-        if value:
-            return int(value)
-        else:
-            return None
-
     def _new_plots_viewer(self, title='Plot view', figsize=(8, 3), close_last=True):
         if close_last and len(self.plots_viewers) >= 1:
             viewer = self.plots_viewers.pop()
@@ -220,7 +189,7 @@ class GEMspaWidget(QWidget):
                 try:
                     _ = float(text)
                 except ValueError:
-                    self.show_error(f"{key} input must be a number")
+                    show_error(f"{key} input must be a number")
                     valid = False
         return valid
 

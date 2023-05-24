@@ -4,7 +4,7 @@ import numpy as np
 from gemspa_spt import ParticleTracks
 from qtpy.QtWidgets import (QGridLayout, QLabel, QLineEdit, QCheckBox, QVBoxLayout, QComboBox)
 from qtpy.QtCore import Slot
-
+from ._utils import show_error, convert_to_int, convert_to_float, remove_outside_mask
 
 """Defines: GEMspaAnalyzeWidget, GEMspaAnalyzeWorker"""
 
@@ -32,14 +32,11 @@ class GEMspaAnalyzeWorker(GEMspaWorker):
         max_lagtime_fit = state_params['max_lagtime_fit']
         error_term_fit = state_params['error_term_fit']
 
+        # TODO
+        # frame_start = state_params['frame_start']
+        # frame_end = state_params['frame_end']
+
         tracks_layer_data = input_params['tracks_layer_data']
-        if tracks_layer_data.shape[1] == 4:
-            # ParticleTracks class expects a column for z-dimension
-            tracks = ParticleTracks(np.insert(tracks_layer_data, 2, 0, axis=1))
-        else:
-            tracks = ParticleTracks(tracks_layer_data)
-        tracks.microns_per_pixel = microns_per_pixel
-        tracks.time_lag_sec = time_lag_sec
 
         # Find out 2d or 3d
         if tracks_layer_data.shape[1] == 5:
@@ -50,6 +47,36 @@ class GEMspaAnalyzeWorker(GEMspaWorker):
             track_cols = ['track_id', 'frame', 'y', 'x']
         else:
             raise ValueError("Tracks layer has an unexpected dimension.")
+
+        # create data frame of track data
+        track_data_df = pd.DataFrame(tracks_layer_data, columns=track_cols)
+
+        # process the entire movie - limited by frame start/end
+        # TODO
+        # if batch and (frame_start is not None or frame_end is not None):
+        #     frame_start, frame_end = fix_frame_limits(frame_start, frame_end, track_data_df['frame'].max() + 1)
+        #     track_data_df = track_data_df[(track_data_df['frame'] >= frame_start) &
+        #                                   (track_data_df['frame'] <= frame_end)]
+        #     self.log.emit(f"After filter for frames from {frame_start} to {frame_end}, number of tracks: " +
+        #                   f"{track_data_df['track_id'].nunique()}")
+
+        # if labels layer was chosen, remove all tracks that contain points that are outside labeled regions
+        # *note* this function is not implemented for 3D (z-dimensional) data
+        # *note* if not run in batch mode (only analyze a single track), the labels layer is ignored
+        if batch and 'labels_layer_data' in input_params:
+            labeled_mask = input_params['labels_layer_data']
+            track_data_df = remove_outside_mask(track_data_df, labeled_mask, id_column='track_id')
+            self.log.emit(
+                f"Removed particles outside of mask region, number of particles: {track_data_df['track_id'].nunique()}")
+
+        # Create the gemspa-spt class object for performing analysis
+        if not z_col:
+            # ParticleTracks class expects a column for z-dimension
+            tracks = ParticleTracks(np.insert(track_data_df.to_numpy(), 2, 0, axis=1))
+        else:
+            tracks = ParticleTracks(track_data_df.to_numpy())
+        tracks.microns_per_pixel = microns_per_pixel
+        tracks.time_lag_sec = time_lag_sec
 
         out_data = dict()
         if batch:
@@ -109,15 +136,14 @@ class GEMspaAnalyzeWorker(GEMspaWorker):
             all_fit_data = all_fit_data.round({'D': 4, 'E': 4, 'r_sq (lin)': 2, 'K': 4, 'a': 4, 'r_sq (log)': 2})
 
             # Merge fit results with track data
-            track_data = pd.DataFrame(tracks_layer_data, columns=track_cols)
             msds = pd.DataFrame(msds[:, [1, 5]], columns=['tau', 'msd'])
             msds.msd = msds.msd.where(msds.tau > 0, other=np.nan)
             step_sizes = pd.DataFrame(step_sizes[:, [1, 5]], columns=['t', 'step_size'])
             step_sizes.where(step_sizes.t > 0, other=np.nan)
             step_sizes.step_size = step_sizes.step_size.where(step_sizes.t > 0, other=np.nan)
-            track_data = pd.concat([track_data, msds, step_sizes], axis=1)
+            track_data_df = pd.concat([track_data_df, msds, step_sizes], axis=1)
 
-            merged_data = track_data.merge(all_fit_data, how='left', on='track_id')
+            merged_data = track_data_df.merge(all_fit_data, how='left', on='track_id')
 
             # Add frame start and frame end to the fit results
             frames = merged_data.groupby('track_id', as_index=False).agg(frame_start=('frame', 'min'),
@@ -191,14 +217,14 @@ class GEMspaAnalyzeWorker(GEMspaWorker):
                                 'msd': msds[1:max_lagtime_fit + 1, [0, 4]]
                                 }
 
-                track_data = pd.DataFrame(tracks_layer_data[tracks_layer_data[:, 0] == track_id, :], columns=track_cols)
+                track_data_df = pd.DataFrame(tracks_layer_data[tracks_layer_data[:, 0] == track_id, :], columns=track_cols)
                 msds = pd.DataFrame(msds[:, [0, 4]], columns=['tau', 'msd'])
                 msds = msds.round({'msd': 4})
                 step_sizes = pd.DataFrame(step_sizes[:, [0, 4]], columns=['t', 'step_size'])
                 step_sizes = step_sizes.round({'step_size': 4})
-                track_data = pd.concat([track_data, msds, step_sizes], axis=1)
+                track_data_df = pd.concat([track_data_df, msds, step_sizes], axis=1)
 
-                out_data = {'df': track_data,
+                out_data = {'df': track_data_df,
                             'summary_data': summary_data,
                             'batch': batch,
                             }
@@ -339,7 +365,7 @@ class GEMspaAnalyzeWidget(GEMspaWidget):
                 try:
                     _ = float(text)
                 except ValueError:
-                    self.show_error(f"{key} input must be a number")
+                    show_error(f"{key} input must be a number")
                     valid = False
 
         for line_input in [self._color_by_min_D_input,
@@ -352,7 +378,7 @@ class GEMspaAnalyzeWidget(GEMspaWidget):
                 try:
                     _ = float(text)
                 except ValueError:
-                    self.show_error(f"Min/Max for color by must be a number")
+                    show_error(f"Min/Max for color by must be a number")
                     valid = False
 
         return valid
@@ -360,6 +386,7 @@ class GEMspaAnalyzeWidget(GEMspaWidget):
     def state(self, layer_names) -> dict:
 
         inputs_dict = {'tracks_layer_name': layer_names['tracks'],
+                       'image_layer_name': layer_names['image'],
                        'tracks_layer_scale': self.viewer.layers[layer_names['tracks']].scale,
                        'image_layer_shape': self.viewer.layers[layer_names['image']].data.shape,
                        'tracks_layer_data': self.viewer.layers[layer_names['tracks']].data,
@@ -372,7 +399,7 @@ class GEMspaAnalyzeWidget(GEMspaWidget):
         if self._batch_check.isChecked():
             track_id = None
         else:
-            track_id = self._convert_to_int(self._input_values['Track id'].text())
+            track_id = convert_to_int(self._input_values['Track id'].text())
 
         color_by = {}
         for check_box in self._color_by_checks:
@@ -381,22 +408,22 @@ class GEMspaAnalyzeWidget(GEMspaWidget):
         return {'name': self.name,
                 'inputs': inputs_dict,
                 'parameters': {'track_id': track_id,
-                               'microns_per_pixel': self._convert_to_float(
+                               'microns_per_pixel': convert_to_float(
                                    self._input_values['Microns per px'].text()),
-                               'time_lag_sec': self._convert_to_float(
+                               'time_lag_sec': convert_to_float(
                                    self._input_values['Time lag (sec)'].text()),
-                               'min_len_fit': self._convert_to_int(
+                               'min_len_fit': convert_to_int(
                                    self._input_values['Min track len for fit (frames)'].text()),
-                               'max_lagtime_fit': self._convert_to_int(
+                               'max_lagtime_fit': convert_to_int(
                                    self._input_values['Max time lag for fit (frames)'].text()),
                                'batch': self._batch_check.isChecked(),
                                'error_term_fit': self._error_term_fit_check.isChecked(),
                                },
                 'color_by': color_by,
-                'color_by_min_max': {'D': [self._convert_to_float(self._color_by_min_D_input.text()),
-                                           self._convert_to_float(self._color_by_max_D_input.text())],
-                                     'a': [self._convert_to_float(self._color_by_min_alpha_input.text()),
-                                           self._convert_to_float(self._color_by_max_alpha_input.text())]
+                'color_by_min_max': {'D': [convert_to_float(self._color_by_min_D_input.text()),
+                                           convert_to_float(self._color_by_max_D_input.text())],
+                                     'a': [convert_to_float(self._color_by_min_alpha_input.text()),
+                                           convert_to_float(self._color_by_max_alpha_input.text())]
                                      }
                 }
 

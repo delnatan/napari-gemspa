@@ -1,10 +1,8 @@
 from ._gemspa_widget import GEMspaWidget, GEMspaWorker
-import pandas as pd
 import trackpy as tp
-from qtpy.QtWidgets import (QWidget, QGridLayout, QLabel, QLineEdit, QCheckBox, QComboBox, QVBoxLayout)
+from qtpy.QtWidgets import QLineEdit
 from qtpy.QtCore import Slot
-from qtpy import QtCore
-
+from ._utils import show_error, convert_to_int, convert_to_float
 
 """Defines: GEMspaFilterLinksWidget, GEMspaFilterLinksWorker"""
 
@@ -114,24 +112,19 @@ class GEMspaFilterLinksWidget(GEMspaWidget):
 
     def state(self, layer_names) -> dict:
 
-        inputs_dict = {'tracks_layer_name': layer_names['tracks'],
-                       'tracks_layer_data': self.viewer.layers[layer_names['tracks']].data,
-                       'tracks_layer_scale': self.viewer.layers[layer_names['tracks']].scale,
-                       'tracks_layer_props': self.viewer.layers[layer_names['tracks']].properties
-                       }
-        if 'labels' in layer_names:
-            inputs_dict['labels_layer_name'] = layer_names['labels']
-            inputs_dict['labels_layer_data'] = self.viewer.layers[layer_names['labels']].data
-
         return {'name': self.name,
-                'inputs': inputs_dict,
-                'parameters': {'min_frames': self._convert_to_int(self._input_values['Min frames'].text()),
-                               'min_mass': self._convert_to_float(self._input_values['Min mass'].text()),
-                               'max_mass': self._convert_to_float(self._input_values['Max mass'].text()),
-                               'min_size': self._convert_to_float(self._input_values['Min size'].text()),
-                               'max_size': self._convert_to_float(self._input_values['Max size'].text()),
-                               'min_ecc': self._convert_to_float(self._input_values['Min eccentricity'].text()),
-                               'max_ecc': self._convert_to_float(self._input_values['Max eccentricity'].text()),
+                'inputs': {'tracks_layer_name': layer_names['tracks'],
+                           'tracks_layer_data': self.viewer.layers[layer_names['tracks']].data,
+                           'tracks_layer_scale': self.viewer.layers[layer_names['tracks']].scale,
+                           'tracks_layer_props': self.viewer.layers[layer_names['tracks']].properties
+                           },
+                'parameters': {'min_frames': convert_to_int(self._input_values['Min frames'].text()),
+                               'min_mass': convert_to_float(self._input_values['Min mass'].text()),
+                               'max_mass': convert_to_float(self._input_values['Max mass'].text()),
+                               'min_size': convert_to_float(self._input_values['Min size'].text()),
+                               'max_size': convert_to_float(self._input_values['Max size'].text()),
+                               'min_ecc': convert_to_float(self._input_values['Min eccentricity'].text()),
+                               'max_ecc': convert_to_float(self._input_values['Max eccentricity'].text()),
                                },
                 }
 
@@ -145,7 +138,7 @@ class GEMspaFilterLinksWidget(GEMspaWidget):
                       'tail_length': df['frame'].max(),
                       'name': 'Linked features (filtered)'}
             if len(df) == 0:
-                self.show_error("No particles were linked!")
+                show_error("No particles were linked!")
             else:
                 layer = self._add_napari_layer("tracks", df, **kwargs)
 

@@ -153,24 +153,24 @@ class GEMspaPlugin(QWidget):
 
         # Subwidget 0 : Import a file
         widget = GEMspaFileImportWidget(self.viewer)
-        self.main_tab.addTab(widget, "Import file")
+        self.main_tab.addTab(widget, "New/Open")
 
         # Subwidget 1 : Localization
         widget = GEMspaLocateWidget(self.viewer)
-        self.main_tab.addTab(widget, "Locate features")
+        self.main_tab.addTab(widget, "Locate")
 
         # Subwidget 2 : Link features
         widget = GEMspaLinkWidget(self.viewer)
-        self.main_tab.addTab(widget, "Link features")
+        self.main_tab.addTab(widget, "Link")
 
         # Subwidget 3 : Filter links
         widget = GEMspaFilterLinksWidget(self.viewer)
-        self.main_tab.addTab(widget, "Filter links")
+        self.main_tab.addTab(widget, "Filter")
 
         # Subwidget 4 : Analysis
         widget = GEMspaAnalyzeWidget(self.viewer)
         widget.display_table_view = True
-        self.main_tab.addTab(widget, "Analyze tracks")
+        self.main_tab.addTab(widget, "Analyze")
 
         # Run button
         self.run_btn = QPushButton('Run')
@@ -181,8 +181,8 @@ class GEMspaPlugin(QWidget):
         layout.addWidget(self.log_widget)
 
         self.setLayout(layout)
-        self.main_tab.setCurrentIndex(1)
-        self.on_current_tab_changed(1)
+        self.main_tab.setCurrentIndex(0)
+        self.on_current_tab_changed(0)
 
         # Connects
         self.main_tab.currentChanged.connect(self.on_current_tab_changed)
@@ -201,16 +201,16 @@ class GEMspaPlugin(QWidget):
             self.image_layer_widget.setVisible(False)
             self.points_layer_widget.setVisible(True)
             self.tracks_layer_widget.setVisible(False)
-            self.labels_layer_widget.setVisible(True)
+            self.labels_layer_widget.setVisible(False)
             self.run_btn.setEnabled(True)
         elif self.selected_widget.name == 'GEMspaFilterLinksWidget':
             self.image_layer_widget.setVisible(False)
             self.points_layer_widget.setVisible(False)
             self.tracks_layer_widget.setVisible(True)
-            self.labels_layer_widget.setVisible(True)
+            self.labels_layer_widget.setVisible(False)
             self.run_btn.setEnabled(True)
         elif self.selected_widget.name == 'GEMspaAnalyzeWidget':
-            self.image_layer_widget.setVisible(False)
+            self.image_layer_widget.setVisible(True)
             self.points_layer_widget.setVisible(False)
             self.tracks_layer_widget.setVisible(True)
             self.labels_layer_widget.setVisible(True)
@@ -231,15 +231,14 @@ class GEMspaPlugin(QWidget):
         """Check inputs and start thread"""
         if self.selected_widget.check_inputs():
 
-            if self.labels_layer_widget.layer_name():
-                input_layers_dict = {'labels': self.labels_layer_widget.layer_name()}
-            else:
-                input_layers_dict = {}
-
+            input_layers_dict = {}
             missing_layers_error = ""
+
             if self.selected_widget.name == 'GEMspaLocateWidget':
                 if self.image_layer_widget.num_layers() > 0:
                     input_layers_dict['image'] = self.image_layer_widget.layer_name()
+                    if self.labels_layer_widget.layer_name():
+                        input_layers_dict['labels'] = self.labels_layer_widget.layer_name()
                 else:
                     missing_layers_error = 'No Image layers.'
 
@@ -259,6 +258,8 @@ class GEMspaPlugin(QWidget):
                 if self.tracks_layer_widget.num_layers() > 0 and self.image_layer_widget.num_layers() > 0:
                     input_layers_dict['tracks'] = self.tracks_layer_widget.layer_name()
                     input_layers_dict['image'] = self.image_layer_widget.layer_name()
+                    if self.labels_layer_widget.layer_name():
+                        input_layers_dict['labels'] = self.labels_layer_widget.layer_name()
                 else:
                     missing_layers_error = 'No Tracks/Image layers.'
 
