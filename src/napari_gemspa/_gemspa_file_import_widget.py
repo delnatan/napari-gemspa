@@ -7,20 +7,17 @@ import nd2
 from skimage import io
 import napari
 import numpy as np
+from gemspa_spt import ParticleTracks
+
 
 """Defines: GEMspaFileImport, GEMspaFileImportWidget"""
 
 
 class GEMspaFileImport:
-    file_columns = {'mosaic': ['trajectory', 'frame', 'z', 'y', 'x'],
-                    'trackmate': ['track_id', 'frame', 'position_z', 'position_y', 'position_x'],
-                    'trackpy': ['particle', 'frame', 'z', 'y', 'x'],
-                    'gemspa': ['track_id', 'frame', 'z', 'y', 'x']}
-    skip_rows = {'mosaic': None, 'trackmate': [1, 2, 3], 'trackpy': None, 'gemspa': None}
 
     def __init__(self, path, data_format):
 
-        if data_format not in GEMspaFileImport.file_columns.keys():
+        if data_format not in ParticleTracks.file_columns.keys():
             raise ValueError(f"Unexpected file format: {data_format} when importing file.")
 
         self.file_path = path
@@ -31,15 +28,16 @@ class GEMspaFileImport:
         elif file_ext == '.txt' or file_ext == '.tsv':
             self.file_sep = '\t'
         else:
-            print(f"Unknown extension found for file {self.file_path}.  Attempting to open as a tab-delimited text file.")
+            print(f"Unknown extension found for '{self.file_path}'. Attempting to open as a tab-delimited text file.")
             self.file_sep = '\t'
 
-        self.file_df = pd.read_csv(self.file_path, sep=self.file_sep, header=0, skiprows=self.skip_rows[data_format])
+        self.file_df = pd.read_csv(self.file_path, sep=self.file_sep, header=0,
+                                   skiprows=ParticleTracks.skip_rows[data_format])
         self.file_df.columns = [item.lower() for item in self.file_df.columns]
 
     def get_layer_data(self):
 
-        all_cols = GEMspaFileImport.file_columns[self.file_format]
+        all_cols = ParticleTracks.file_columns[self.file_format]
         cols = all_cols[3:5]  # ['y','x']: mandatory
         for col in cols:
             if col not in self.file_df.columns:

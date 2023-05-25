@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING, Any, List, Sequence, Tuple, Union
 
 import pandas as pd
 import os
-import numpy as np
 
 if TYPE_CHECKING:
     DataType = Union[Any, Sequence[Any]]
