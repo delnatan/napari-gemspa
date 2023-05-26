@@ -10,8 +10,7 @@ def create_viewer():
 
     # add some layers to the viewer - there is an example movie in the same path as this script file
     path = os.path.split(os.path.realpath(__file__))[0]
-    example_tif_movie = "example_movie_hpne_CytoGEMs_005_1-100.tif"
-    movie = io.imread(os.path.join(path, example_tif_movie))
+    movie = io.imread(os.path.join(path, "../../../example_movie_hpne_CytoGEMs_005_1-100.tif"))
     viewer.add_image(movie)
 
     test_analyze = True

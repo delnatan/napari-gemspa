@@ -84,6 +84,7 @@ class GEMspaAnalyzeWorker(GEMspaWorker):
             # Ensemble average effective Diffusion (linear) and alpha (log-log)
             msds = tracks.msd_all_tracks()
             step_sizes = tracks.step_size_all_tracks()
+            r_of_g = tracks.r_of_g_all_tracks()
             ens_msds, n_ens_tracks = tracks.ensemble_avg_msd()
 
             # fit ensemble MSD, get D and alpha
@@ -104,6 +105,7 @@ class GEMspaAnalyzeWorker(GEMspaWorker):
                      alpha,
                      r_squared2]]
             ens_fit_data = pd.DataFrame(data, columns=['dim', 'D', 'E', 'r_sq (lin)', 'K', 'a', 'r_sq (log)'])
+            ens_fit_data = ens_fit_data.round({'D': 4, 'E': 4, 'r_sq (lin)': 2, 'K': 4, 'a': 4, 'r_sq (log)': 2})
 
             summary_data = {'ens_fit_results': ens_fit_data,
                             'ens_msd': ens_msds[1:max_lagtime_fit + 1, [0, 4]]
@@ -122,8 +124,10 @@ class GEMspaAnalyzeWorker(GEMspaWorker):
             self.log.emit(f"Total number of tracks: {len(tracks.track_ids)}\n" +
                           f"After length filter, number of tracks: {len(tracks.linear_fit_results)}\n")
 
-            # Gather the fit data
-            all_fit_data = np.concatenate([tracks.linear_fit_results, tracks.loglog_fit_results[:, 2:]], axis=1)
+            # Gather the fit data and r-of-g
+            all_fit_data = np.concatenate([tracks.linear_fit_results,
+                                           tracks.loglog_fit_results[:, 2:]
+                                           ], axis=1)
             all_fit_data = pd.DataFrame(all_fit_data, columns=['track_id',
                                                                'dim',
                                                                'D',
@@ -133,15 +137,21 @@ class GEMspaAnalyzeWorker(GEMspaWorker):
                                                                'a',
                                                                'r_sq (log)'])
             all_fit_data.drop('dim', axis=1, inplace=True)
-            all_fit_data = all_fit_data.round({'D': 4, 'E': 4, 'r_sq (lin)': 2, 'K': 4, 'a': 4, 'r_sq (log)': 2})
+            all_fit_data = all_fit_data.round({'D': 4, 'E': 4, 'r_sq (lin)': 2,
+                                               'K': 4, 'a': 4, 'r_sq (log)': 2})
 
             # Merge fit results with track data
             msds = pd.DataFrame(msds[:, [1, 5]], columns=['tau', 'msd'])
             msds.msd = msds.msd.where(msds.tau > 0, other=np.nan)
             step_sizes = pd.DataFrame(step_sizes[:, [1, 5]], columns=['t', 'step_size'])
-            step_sizes.where(step_sizes.t > 0, other=np.nan)
             step_sizes.step_size = step_sizes.step_size.where(step_sizes.t > 0, other=np.nan)
-            track_data_df = pd.concat([track_data_df, msds, step_sizes], axis=1)
+            r_of_g = pd.DataFrame(r_of_g[:, 1:], columns=['t', 'radius_gyration'])
+            r_of_g.radius_gyration = r_of_g.radius_gyration.where(r_of_g.t > 0, other=np.nan)
+
+            # time is t from step size, already in table
+            r_of_g.drop('t', axis=1, inplace=True)
+
+            track_data_df = pd.concat([track_data_df, msds, step_sizes, r_of_g], axis=1)
 
             merged_data = track_data_df.merge(all_fit_data, how='left', on='track_id')
 
@@ -164,6 +174,7 @@ class GEMspaAnalyzeWorker(GEMspaWorker):
 
                 msds = tracks.msd(track_id, fft=True)
                 step_sizes = tracks.step_size(track_id)
+                r_of_g = tracks.r_of_g(track_id)
                 frames = tracks.tracks[tracks.tracks[:, 0] == track_id, 1]
 
                 # Fit for Diffusion coefficient etc
@@ -190,6 +201,7 @@ class GEMspaAnalyzeWorker(GEMspaWorker):
                                                                  msd=msds[1:, col],
                                                                  dim=d,
                                                                  max_lagtime=max_lagtime_fit)
+
                     data.append([track_id,
                                  frames.min(),
                                  frames.max(),
@@ -211,7 +223,16 @@ class GEMspaAnalyzeWorker(GEMspaWorker):
                                                    'K',
                                                    'a',
                                                    'r_sq (log)'])
-                data = data.round({'D': 4, 'E': 4, 'r_sq (lin)': 2, 'K': 4, 'a': 4, 'r_sq (log)': 2})
+
+                # Radius of gyration, for entire track only
+                data['radius_gyration'] = 0
+                data['radius_gyration'].where(data['dim'] != 'sum',
+                                              other=tracks.r_of_g(track_id, full=False),
+                                              inplace=True)
+
+                data = data.round({'D': 4, 'E': 4, 'r_sq (lin)': 2,
+                                   'K': 4, 'a': 4, 'r_sq (log)': 2,
+                                   'radius_gyration': 4})
 
                 summary_data = {'fit_results': data,
                                 'msd': msds[1:max_lagtime_fit + 1, [0, 4]]
@@ -222,7 +243,11 @@ class GEMspaAnalyzeWorker(GEMspaWorker):
                 msds = msds.round({'msd': 4})
                 step_sizes = pd.DataFrame(step_sizes[:, [0, 4]], columns=['t', 'step_size'])
                 step_sizes = step_sizes.round({'step_size': 4})
-                track_data_df = pd.concat([track_data_df, msds, step_sizes], axis=1)
+
+                r_of_g = pd.DataFrame(r_of_g[:, 1:], columns=['radius_gyration'])
+                r_of_g = r_of_g.round({'radius_gyration': 4})
+
+                track_data_df = pd.concat([track_data_df, msds, step_sizes, r_of_g], axis=1)
 
                 out_data = {'df': track_data_df,
                             'summary_data': summary_data,
@@ -468,8 +493,9 @@ class GEMspaAnalyzeWidget(GEMspaWidget):
                 # Show table of properties (analysis results)
                 if out_dict['batch']:
                     # only show one line for each track if run in batch mode
+                    # take last not first when dropping duplicates to pull the r-of-g for full length track
                     # remove the tracks that were filtered for length (fit results are all nan's)
-                    df = df.drop_duplicates(subset='track_id', keep='first')
+                    df = df.drop_duplicates(subset='track_id', keep='last')
                     df = df.drop(labels=['frame', 'y', 'x', 'tau', 'msd', 't', 'step_size'], axis=1)
                     if 'z' in df.columns:
                         # also drop z if it exists
@@ -486,6 +512,11 @@ class GEMspaAnalyzeWidget(GEMspaWidget):
                 plots_viewer = self._new_plots_viewer(title, close_last=False)
                 plots_viewer.plot_analyze_results(out_dict)
                 plots_viewer.show()
+
+                if out_dict['batch']:
+                    plots_viewer = self._new_plots_viewer(title, close_last=False)
+                    plots_viewer.plot_tracks_info(out_dict)
+                    plots_viewer.show()
 
 
 

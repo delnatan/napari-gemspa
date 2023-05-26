@@ -43,7 +43,8 @@ class GEMspaPlottingWindow(QMainWindow):
 
         for i, row in enumerate(df.iterrows()):
             for j, col in enumerate(df.columns):
-                t.setItem(i, j, QTableWidgetItem(str(row[1][col])))
+                val = row[1][col]
+                t.setItem(i, j, QTableWidgetItem(str(val)))
 
     def plot_locate_results(self, df):
 
@@ -174,6 +175,35 @@ class GEMspaPlottingWindow(QMainWindow):
 
         self.canvas.figure.tight_layout()
 
+    def plot_tracks_info(self, out_data):
+
+        df = out_data['df']
+
+        self.canvas.figure.clear()
+        axs = self.canvas.figure.subplots(1, 3)
+
+        # Show track length histogram
+        track_lengths = df['track_id'].value_counts(sort=False)
+
+        axs[0].hist(track_lengths, bins=range(0, track_lengths.max() + 1, 1))  # , histtype='step')
+        axs[0].set(xlabel='track length', ylabel='counts')
+        axs[0].set_title('Track lengths (# frames)')
+
+        # Show r of g histogram - only final r of g
+        df = df.drop_duplicates(subset='track_id', keep='last')
+        rg = df['radius_gyration']
+
+        axs[1].hist(rg, bins=np.linspace(0, rg.max(), 30))  # , histtype='step')
+        axs[1].set(xlabel='radius', ylabel='counts')
+        axs[1].set_title('Radius of gyration (microns)')
+
+        # Scatter
+        axs[2].scatter(track_lengths, rg, s=4)
+        axs[2].set(xlabel='Track length', ylabel='Radius of gyration')
+        axs[2].set_title('Scatter')
+
+        self.canvas.figure.tight_layout()
+
     def plot_analyze_results(self, out_data):
 
         summary_table = QTableWidget()
@@ -184,7 +214,6 @@ class GEMspaPlottingWindow(QMainWindow):
 
             msd = plot_data['ens_msd']
             df = plot_data['ens_fit_results']
-            df = df.round({'D': 4, 'E': 4, 'r_sq (lin)': 2, 'K': 4, 'a': 4, 'r_sq (log)': 2})
 
             # Table of data
             self._fill_table(summary_table, df)
@@ -209,7 +238,6 @@ class GEMspaPlottingWindow(QMainWindow):
             plot_data = out_data['summary_data']
             msd = plot_data['msd']
             df = plot_data['fit_results']
-            df = df.round({'D': 4, 'E': 4, 'r_sq (lin)': 2, 'K': 4, 'a': 4, 'r_sq (log)': 2})
 
             # Table of data
             self._fill_table(summary_table, df)
