@@ -11,9 +11,9 @@ contributions:
     - id: napari-gemspa.write_tracks
       python_name: napari_gemspa._writer:write_tracks
       title: Save tracks layer data with GEMspa
-    - id: napari-gemspa.make_sample_data
-      python_name: napari_gemspa._sample_data:make_sample_data
-      title: Load sample data from GEMspa
+    #- id: napari-gemspa.make_sample_data
+    #  python_name: napari_gemspa._sample_data:make_sample_data
+    #  title: Load sample data from GEMspa
     - id: napari-gemspa.make_gemspa_plugin
       python_name: napari_gemspa._gemspa_plugin:GEMspaPlugin
       title: Make GEMspa plugin
@@ -28,10 +28,10 @@ contributions:
     - command: napari-gemspa.write_tracks
       layer_types: ['tracks']
       filename_extensions: [ "txt", "csv", "tsv"]
-  sample_data:
-    - command: napari-gemspa.make_sample_data
-      display_name: GEMspa
-      key: unique_id.1
+#  sample_data:
+#    - command: napari-gemspa.make_sample_data
+#      display_name: GEMspa
+#      key: unique_id.1
   widgets:
     - command: napari-gemspa.make_gemspa_plugin
       display_name: GEMspa
