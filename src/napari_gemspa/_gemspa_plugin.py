@@ -44,7 +44,6 @@ class GEMspaLayerInput(QWidget):
             if self._is_layer_type_instance(layer):
                 self._input_layer_box.addItem(layer.name)
 
-
     def _is_layer_type_instance(self, layer):
         if ((self.layer_type == 'image' and isinstance(layer, napari.layers.image.image.Image)) or
                 (self.layer_type == 'points' and isinstance(layer, napari.layers.points.points.Points)) or
