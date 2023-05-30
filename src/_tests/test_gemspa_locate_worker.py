@@ -25,7 +25,7 @@ def make_state_dict(viewer, layer_names):
             'parameters': {'frame_start': 0,
                            'frame_end': len(viewer.layers[layer_names['image']].data),
                            'diameter': 9,
-                           'minmass': 100,
+                           'minmass': 80,
                            'maxsize': None,
                            'separation': 7,
                            'noise_size': 1,
@@ -44,7 +44,7 @@ def test_locate_worker(qtbot, make_napari_viewer):
     viewer = make_napari_viewer()
 
     # add some layers to the viewer - there is an example movie in the same path as this script file
-    path = "/Users/snk218/Dropbox (NYU Langone Health)/mac_files/holtlab/data_and_results/" 
+    path = "/Users/snk218/Dropbox (NYU Langone Health)/mac_files/holtlab/data_and_results/"
     movie = io.imread(os.path.join(path, "Example_GEM_movies/01_HeLa_nucPfV_2h_DMSO_003.tif"))
     #path = os.path.split(os.path.realpath(__file__))[0]
     #movie = io.imread(os.path.join(path, "../../example_data/example_movie_hpne_CytoGEMs_005_1-100.tif"))

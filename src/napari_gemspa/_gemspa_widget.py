@@ -159,12 +159,12 @@ class GEMspaWidget(QWidget):
 
         # Perform startup tasks and start thread: worker must be initialized before this function is called
 
-        # connect worker log signal to the GEMspaLogWidget all_log method
-        self.worker.log.connect(log_widget.add_log)
-
         # Thread for this worker
         self.thread = QThread()
         self.worker.moveToThread(self.thread)
+
+        # connect worker log signal to the GEMspaLogWidget all_log method
+        self.worker.log.connect(log_widget.add_log)
 
         # when thread is started, worker is run with the current state of the widget as input
         self.thread.started.connect(lambda: self.worker.run(self.state(layer_names)))
