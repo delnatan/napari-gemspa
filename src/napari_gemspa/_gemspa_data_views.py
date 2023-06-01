@@ -117,7 +117,7 @@ class GEMspaPlottingWindow(QMainWindow):
 
         if color_range is None:
             min_val = 0
-            if color_by in ["step_size", "frame"]:
+            if color_by in ["step_size", "frame", "track_length"]:
                 max_val = df[color_by].max()
             elif color_by == "D":
                 max_val = 2
@@ -143,7 +143,7 @@ class GEMspaPlottingWindow(QMainWindow):
             track_data = group[1]
             if color_by == "track_id":
                 ax.plot(track_data["x"], track_data["y"], "-")
-            elif color_by in ["D", "a", "r_sq (lin)"]:
+            elif color_by in ["D", "a", "r_sq (lin)", "track_length"]:
                 val = track_data.iloc[0][color_by]
                 if not np.isnan(val):
                     ax.plot(
