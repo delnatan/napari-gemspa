@@ -1,17 +1,26 @@
-import napari
-import pandas as pd
-import numpy as np
-import matplotlib as mpl
-from qtpy.QtCore import Qt, QCoreApplication, QRect
-from qtpy.QtWidgets import (QWidget, QApplication, QVBoxLayout,
-                            QTableWidget, QAbstractItemView, QTableWidgetItem,
-                            QMainWindow, QMenuBar, QMenu, QAction, QFileDialog)
-
-from matplotlib.backends.backend_qtagg import (FigureCanvas, NavigationToolbar2QT as NavigationToolbar)
-from matplotlib.figure import Figure
-
-
 """Defines: GEMspaPlottingWindow, GEMspaTableWidget, GEMspaTableWindow"""
+
+import matplotlib as mpl
+import napari
+import numpy as np
+import pandas as pd
+from matplotlib.backends.backend_qtagg import FigureCanvas
+from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
+from matplotlib.figure import Figure
+from qtpy.QtCore import QCoreApplication, QRect, Qt
+from qtpy.QtWidgets import (
+    QAbstractItemView,
+    QAction,
+    QApplication,
+    QFileDialog,
+    QMainWindow,
+    QMenu,
+    QMenuBar,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
 
 class GEMspaPlottingWindow(QMainWindow):
@@ -47,52 +56,54 @@ class GEMspaPlottingWindow(QMainWindow):
                 t.setItem(i, j, QTableWidgetItem(str(val)))
 
     def plot_locate_results(self, df):
-
         self.canvas.figure.clear()
         axs = self.canvas.figure.subplots(1, 3)
 
         # Show Mass histogram
-        axs[0].hist(df['mass'], bins=20)
-        axs[0].set(xlabel='mass', ylabel='count')
-        axs[0].set_title('mass')
+        axs[0].hist(df["mass"], bins=20)
+        axs[0].set(xlabel="mass", ylabel="count")
+        axs[0].set_title("mass")
 
         # Show subpixel bias (histogram fractional part of x/y positions)
-        axs[1].hist(np.modf(df['x'])[0], bins=20)
-        axs[1].set(xlabel='x', ylabel='count')
-        axs[1].set_title('sub px bias (x)')
+        axs[1].hist(np.modf(df["x"])[0], bins=20)
+        axs[1].set(xlabel="x", ylabel="count")
+        axs[1].set_title("sub px bias (x)")
 
-        axs[2].hist(np.modf(df['y'])[0], bins=20)
-        axs[2].set(xlabel='y', ylabel='count')
-        axs[2].set_title('sub px bias (y)')
+        axs[2].hist(np.modf(df["y"])[0], bins=20)
+        axs[2].set(xlabel="y", ylabel="count")
+        axs[2].set_title("sub px bias (y)")
 
         self.canvas.figure.tight_layout()
 
     def plot_link_results(self, df):
-
         self.canvas.figure.clear()
         axs = self.canvas.figure.subplots(1, 3)
 
         # Show plots of mass vs. size and mass vs. eccentricity
-        mean_t = df.groupby('track_id').mean()
+        mean_t = df.groupby("track_id").mean()
 
-        axs[0].plot(mean_t['mass'], mean_t['size'], 'ko', alpha=0.1)
-        axs[0].set(xlabel='mass', ylabel='size')
-        axs[0].set_title('mass vs size')
+        axs[0].plot(mean_t["mass"], mean_t["size"], "ko", alpha=0.3)
+        axs[0].set(xlabel="mass", ylabel="size")
+        axs[0].set_title("mass vs size")
 
-        axs[1].plot(mean_t['mass'], mean_t['ecc'], 'ko', alpha=0.3)
-        axs[1].set(xlabel='mass', ylabel='eccentricity (0=circular)')
-        axs[1].set_title('mass vs eccentricity')
+        axs[1].plot(mean_t["mass"], mean_t["ecc"], "ko", alpha=0.3)
+        axs[1].set(xlabel="mass", ylabel="eccentricity (0=circular)")
+        axs[1].set_title("mass vs eccentricity")
 
         # Show track length histogram
-        track_lengths = df['track_id'].value_counts(sort=False)
+        track_lengths = df["track_id"].value_counts(sort=False)
 
-        axs[2].hist(track_lengths, bins=range(0, track_lengths.max()+1, 1)) #, histtype='step')
-        axs[2].set(xlabel='track length', ylabel='counts')
-        axs[2].set_title('Track lengths histogram')
+        axs[2].hist(
+            track_lengths, bins=range(0, track_lengths.max() + 3, 3)
+        )  # , histtype='step')
+        axs[2].set(xlabel="track length", ylabel="counts")
+        axs[2].set_title("Track lengths histogram")
 
         self.canvas.figure.tight_layout()
 
-    def plot_rainbow_tracks(self, df, img_shape=None, color_by="track_id", color_range=None):
+    def plot_rainbow_tracks(
+        self, df, img_shape=None, color_by="track_id", color_range=None
+    ):
         self.canvas.figure.clear()
         ax = self.canvas.figure.subplots(1, 1)
 
@@ -106,7 +117,7 @@ class GEMspaPlottingWindow(QMainWindow):
 
         if color_range is None:
             min_val = 0
-            if color_by in ['step_size', 'frame']:
+            if color_by in ["step_size", "frame"]:
                 max_val = df[color_by].max()
             elif color_by == "D":
                 max_val = 2
@@ -118,7 +129,7 @@ class GEMspaPlottingWindow(QMainWindow):
         if img_shape is not None:
             max_y = img_shape[0]
         else:
-            max_y = df['y'].max()
+            max_y = df["y"].max()
 
         def get_color(v):
             if v < min_val:
@@ -128,32 +139,54 @@ class GEMspaPlottingWindow(QMainWindow):
             return (v - min_val) / (max_val - min_val)
 
         # Plot all tracks
-        for group in df.groupby('track_id'):
+        for group in df.groupby("track_id"):
             track_data = group[1]
-            if color_by == 'track_id':
-                ax.plot(track_data['x'], track_data['y'], '-')
-            elif color_by in ['D', 'a', 'r_sq (lin)']:
+            if color_by == "track_id":
+                ax.plot(track_data["x"], track_data["y"], "-")
+            elif color_by in ["D", "a", "r_sq (lin)"]:
                 val = track_data.iloc[0][color_by]
                 if not np.isnan(val):
-                    ax.plot(track_data['x'], track_data['y'],
-                            '-', color=mpl.cm.jet(get_color(val)))
-            elif color_by in ['step_size', 'frame']:
+                    ax.plot(
+                        track_data["x"],
+                        track_data["y"],
+                        "-",
+                        color=mpl.cm.jet(get_color(val)),
+                    )
+            elif color_by in ["step_size", "frame"]:
                 for step_i in range(1, len(track_data), 1):
                     val = track_data.iloc[step_i][color_by]
                     if not np.isnan(val):
-                        ax.plot([track_data.iloc[step_i-1]['x'], track_data.iloc[step_i]['x']],
-                                [track_data.iloc[step_i-1]['y'], track_data.iloc[step_i]['y']],
-                                '-', color=mpl.cm.jet(get_color(val)))
+                        ax.plot(
+                            [
+                                track_data.iloc[step_i - 1]["x"],
+                                track_data.iloc[step_i]["x"],
+                            ],
+                            [
+                                track_data.iloc[step_i - 1]["y"],
+                                track_data.iloc[step_i]["y"],
+                            ],
+                            "-",
+                            color=mpl.cm.jet(get_color(val)),
+                        )
             elif color_by == "t":
                 max_val = len(track_data)
                 for step_i in range(1, max_val, 1):
                     show_color = step_i / max_val
-                    ax.plot([track_data.iloc[step_i - 1]['x'], track_data.iloc[step_i]['x']],
-                            [track_data.iloc[step_i - 1]['y'], track_data.iloc[step_i]['y']],
-                            '-', color=mpl.cm.jet(show_color))
+                    ax.plot(
+                        [
+                            track_data.iloc[step_i - 1]["x"],
+                            track_data.iloc[step_i]["x"],
+                        ],
+                        [
+                            track_data.iloc[step_i - 1]["y"],
+                            track_data.iloc[step_i]["y"],
+                        ],
+                        "-",
+                        color=mpl.cm.jet(show_color),
+                    )
             else:
                 print("Rainbow tracks: Unknown color_by option, using track_id...")
-                ax.plot(group[1]['x'], group[1]['y'], '-')
+                ax.plot(group[1]["x"], group[1]["y"], "-")
 
         if img_shape is not None and len(img_shape) > 1:
             ax.set_xlim(0, img_shape[1])
@@ -161,111 +194,134 @@ class GEMspaPlottingWindow(QMainWindow):
 
         ax.set_ylim(max_y, 0)
 
-        if color_by != 'track_id':
-            if color_by == 't':
+        if color_by != "track_id":
+            if color_by == "t":
                 norm = mpl.colors.Normalize(vmin=0, vmax=1)
-                cmap = mpl.cm.ScalarMappable(norm=norm, cmap='jet')
+                cmap = mpl.cm.ScalarMappable(norm=norm, cmap="jet")
                 cbar = self.canvas.figure.colorbar(cmap)
                 cbar.set_ticks([0, 1])
-                cbar.set_ticklabels(['Start', 'End'])
+                cbar.set_ticklabels(["Start", "End"])
             else:
                 norm = mpl.colors.Normalize(vmin=min_val, vmax=max_val)
-                cmap = mpl.cm.ScalarMappable(norm=norm, cmap='jet')
+                cmap = mpl.cm.ScalarMappable(norm=norm, cmap="jet")
                 cbar = self.canvas.figure.colorbar(cmap)
 
         self.canvas.figure.tight_layout()
 
     def plot_tracks_info(self, out_data):
-
-        df = out_data['df']
+        df = out_data["df"]
 
         self.canvas.figure.clear()
         axs = self.canvas.figure.subplots(1, 3)
 
         # Show track length histogram
-        track_lengths = df['track_id'].value_counts(sort=False)
+        track_lengths = df["track_id"].value_counts(sort=False)
 
-        axs[0].hist(track_lengths, bins=range(0, track_lengths.max() + 1, 1))  # , histtype='step')
-        axs[0].set(xlabel='track length', ylabel='counts')
-        axs[0].set_title('Track lengths (# frames)')
+        axs[0].hist(
+            track_lengths, bins=range(0, track_lengths.max() + 3, 3)
+        )  # , histtype='step')
+        axs[0].set(xlabel="track length", ylabel="counts")
+        axs[0].set_title("Track lengths (# frames)")
 
         # Show r of g histogram - only final r of g
-        df = df.drop_duplicates(subset='track_id', keep='last')
-        rg = df['radius_gyration']
+        df = df.drop_duplicates(subset="track_id", keep="last")
+        rg = df["radius_gyration"]
 
         axs[1].hist(rg, bins=np.linspace(0, rg.max(), 30))  # , histtype='step')
-        axs[1].set(xlabel='radius', ylabel='counts')
-        axs[1].set_title('Radius of gyration (microns)')
+        axs[1].set(xlabel="radius", ylabel="counts")
+        axs[1].set_title("Radius of gyration (microns)")
 
         # Scatter
-        axs[2].scatter(track_lengths, rg, s=4)
-        axs[2].set(xlabel='Track length', ylabel='Radius of gyration')
-        axs[2].set_title('Scatter')
+        axs[2].plot(track_lengths, rg, "ko", alpha=0.3)
+        axs[2].set(xlabel="Track length", ylabel="Radius of gyration")
+        axs[2].set_title("Scatter")
 
         self.canvas.figure.tight_layout()
 
     def plot_analyze_results(self, out_data):
-
         summary_table = QTableWidget()
         self.verticalLayout.addWidget(summary_table)
 
-        if 'ens_fit_results' in out_data['summary_data'] and 'ens_msd' in out_data['summary_data']:
-            plot_data = out_data['summary_data']
+        if (
+            "ens_fit_results" in out_data["summary_data"]
+            and "ens_msd" in out_data["summary_data"]
+        ):
+            plot_data = out_data["summary_data"]
 
-            msd = plot_data['ens_msd']
-            df = plot_data['ens_fit_results']
+            msd = plot_data["ens_msd"]
+            df = plot_data["ens_fit_results"]
 
             # Table of data
             self._fill_table(summary_table, df)
 
-            D = df.iloc[0]['D']
-            alpha = df.iloc[0]['a']
+            D = df.iloc[0]["D"]
+            alpha = df.iloc[0]["a"]
 
             # Ensemble MSD plot
             self.canvas.figure.clear()
             axs = self.canvas.figure.subplots(1, 2)
             axs[0].scatter(msd[:, 0], msd[:, 1])
             axs[1].scatter(msd[:, 0], msd[:, 1])
-            axs[1].set_xscale('log', base=10)
-            axs[1].set_yscale('log', base=10)
-            axs[0].set(xlabel=r'$\tau$ $(s)$', ylabel=r'$MSD$ ($\mu m^{2}$)')
-            axs[1].set(xlabel=r'$log_{10}$ $\tau$ $(s)$', ylabel=r'$log_{10}$ $MSD$ ($\mu m^{2}$)')
+            axs[1].set_xscale("log", base=10)
+            axs[1].set_yscale("log", base=10)
+            axs[0].set(xlabel=r"$\tau$ $(s)$", ylabel=r"$MSD$ ($\mu m^{2}$)")
+            axs[1].set(
+                xlabel=r"$log_{10}$ $\tau$ $(s)$",
+                ylabel=r"$log_{10}$ $MSD$ ($\mu m^{2}$)",
+            )
             axs[0].set_title(f"ens-avg MSD (2d)\nD = {D} " + r"$\mu m^{2}$/s")
-            axs[1].set_title(f"ens-avg log-log MSD (2d)\n" + r"$\alpha$ = " + f"{alpha}")
+            axs[1].set_title("ens-avg log-log MSD (2d)\n" + r"$\alpha$ = " + f"{alpha}")
 
-        elif 'fit_results' in out_data['summary_data'] and 'msd' in out_data['summary_data']:
-
-            plot_data = out_data['summary_data']
-            msd = plot_data['msd']
-            df = plot_data['fit_results']
+        elif (
+            "fit_results" in out_data["summary_data"]
+            and "msd" in out_data["summary_data"]
+        ):
+            plot_data = out_data["summary_data"]
+            msd = plot_data["msd"]
+            df = plot_data["fit_results"]
 
             # Table of data
             self._fill_table(summary_table, df)
 
-            D = df[df.dim == 'sum'].iloc[0]['D']
-            alpha = df[df.dim == 'sum'].iloc[0]['a']
-            track_id = int(df.iloc[0]['track_id'])
+            D = df[df.dim == "sum"].iloc[0]["D"]
+            alpha = df[df.dim == "sum"].iloc[0]["a"]
+            track_id = int(df.iloc[0]["track_id"])
 
             # Make plots (MSD of track, with fit line, linear and loglog scale)
             self.canvas.figure.clear()
             axs = self.canvas.figure.subplots(1, 3)
             axs[0].scatter(msd[:, 0], msd[:, 1])
             axs[1].scatter(msd[:, 0], msd[:, 1])
-            axs[1].set_xscale('log', base=10)
-            axs[1].set_yscale('log', base=10)
-            axs[0].set(xlabel=r'$\tau$ $(s)$', ylabel=r'$MSD$ ($\mu m^{2}$)')
-            axs[1].set(xlabel=r'$log_{10}$ $\tau$ $(s)$', ylabel=r'$log_{10}$ $MSD$ ($\mu m^{2}$)')
-            axs[0].set_title(f'track {track_id} MSD (2d)\nD = {D} ' + r'$\mu m^{2}$/s')
-            axs[1].set_title(f'track {track_id} log-log MSD (2d)\n' + r'$\alpha$ = ' + f'{alpha}')
+            axs[1].set_xscale("log", base=10)
+            axs[1].set_yscale("log", base=10)
+            axs[0].set(xlabel=r"$\tau$ $(s)$", ylabel=r"$MSD$ ($\mu m^{2}$)")
+            axs[1].set(
+                xlabel=r"$log_{10}$ $\tau$ $(s)$",
+                ylabel=r"$log_{10}$ $MSD$ ($\mu m^{2}$)",
+            )
+            axs[0].set_title(f"track {track_id} MSD (2d)\nD = {D} " + r"$\mu m^{2}$/s")
+            axs[1].set_title(
+                f"track {track_id} log-log MSD (2d)\n" + r"$\alpha$ = " + f"{alpha}"
+            )
 
             # Make plot of the track itself...
-            df = out_data['df']
-            x_min = df['x'].min()
-            y_min = df['y'].min()
+            df = out_data["df"]
+            x_min = df["x"].min()
+            y_min = df["y"].min()
 
-            axs[2].plot(df['x']-x_min, df['y']-y_min)
-            axs[2].plot(df.iloc[0]['x']-x_min, df.iloc[0]['y']-y_min, '.', color='green')
-            axs[2].plot(df.iloc[-1]['x']-x_min, df.iloc[-1]['y']-y_min, '.', color='red')
+            axs[2].plot(df["x"] - x_min, df["y"] - y_min)
+            axs[2].plot(
+                df.iloc[0]["x"] - x_min,
+                df.iloc[0]["y"] - y_min,
+                ".",
+                color="green",
+            )
+            axs[2].plot(
+                df.iloc[-1]["x"] - x_min,
+                df.iloc[-1]["y"] - y_min,
+                ".",
+                color="red",
+            )
             axs[2].set_title(f"track {track_id}")
             axs[2].set(xlabel="x", ylabel="y")
 
@@ -283,16 +339,15 @@ class GEMspaTableWidget(QTableWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    def copy_selection_to_clipboard(self, sep='\t'):
+    def copy_selection_to_clipboard(self, sep="\t"):
         copied_cells = sorted(self.selectedIndexes())
-        if(len(copied_cells) > 0):
-
-            copy_text = ''
+        if len(copied_cells) > 0:
+            copy_text = ""
             max_column = copied_cells[-1].column()
             for c in copied_cells:
                 copy_text += self.item(c.row(), c.column()).text()
                 if c.column() == max_column:
-                    copy_text += '\n'
+                    copy_text += "\n"
                 else:
                     copy_text += sep
 
@@ -313,19 +368,20 @@ class GEMspaTableWidget(QTableWidget):
             full_data.append(data)
 
         df = pd.DataFrame(full_data, columns=headers)
-        df.to_csv(fname, sep='\t', index=False)
+        df.to_csv(fname, sep="\t", index=False)
 
     def select_all(self):
         self.selectAll()
 
     def keyPressEvent(self, event):
         super().keyPressEvent(event)
-        if event.key() == Qt.Key_C and (QApplication.keyboardModifiers() & Qt.ControlModifier):
+        if event.key() == Qt.Key_C and (
+            QApplication.keyboardModifiers() & Qt.ControlModifier
+        ):
             self.copy_selection_to_clipboard()
 
 
 class GEMspaTableWindow(QMainWindow):
-
     def __init__(self, napari_viewer):
         super().__init__()
         self.viewer = napari_viewer
@@ -402,7 +458,9 @@ class GEMspaTableWindow(QMainWindow):
         pass
 
     def save_as(self):
-        file_name = QFileDialog.getSaveFileName(self, "Save file...", "", "Text, tab-delimited (*.txt)")
+        file_name = QFileDialog.getSaveFileName(
+            self, "Save file...", "", "Text, tab-delimited (*.txt)"
+        )
         print(f"Saving {file_name}...")
         self.tableWidget.save_to_file(file_name[0])
 
@@ -423,20 +481,24 @@ class GEMspaTableWindow(QMainWindow):
         data = self.viewer.layers[layer_name].data
         properties = self.viewer.layers[layer_name].properties
         headers = []
-        if isinstance(self.viewer.layers[layer_name], napari.layers.points.points.Points):
+        if isinstance(
+            self.viewer.layers[layer_name], napari.layers.points.points.Points
+        ):
             if data.shape[1] == 3:
-                headers = ['frame', 'y', 'x']
+                headers = ["frame", "y", "x"]
             elif data.shape[1] == 4:
-                headers = ['frame', 'z', 'y', 'x']
+                headers = ["frame", "z", "y", "x"]
 
-        elif isinstance(self.viewer.layers[layer_name], napari.layers.tracks.tracks.Tracks):
+        elif isinstance(
+            self.viewer.layers[layer_name], napari.layers.tracks.tracks.Tracks
+        ):
             if data.shape[1] == 4:
-                headers = ['track_id', 'frame', 'y', 'x']
+                headers = ["track_id", "frame", "y", "x"]
             elif data.shape[1] == 5:
-                headers = ['track_id', 'frame', 'z', 'y', 'x']
+                headers = ["track_id", "frame", "z", "y", "x"]
 
             # Avoid repeated column: napari adds track_id column to properties
-            del properties['track_id']
+            del properties["track_id"]
 
         for key in properties:
             headers.append(key)
@@ -447,7 +509,9 @@ class GEMspaTableWindow(QMainWindow):
 
         for line in range(data.shape[0]):
             for col in range(data.shape[1]):
-                self.tableWidget.setItem(line, col, QTableWidgetItem(str(data[line, col])))
+                self.tableWidget.setItem(
+                    line, col, QTableWidgetItem(str(data[line, col]))
+                )
 
         # properties
         col = data.shape[1]

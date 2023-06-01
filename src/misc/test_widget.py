@@ -1,5 +1,4 @@
-import numpy as np
-#from napari_gemspa import locate_widget
+# from napari_gemspa import locate_widget
 
 
 # def test_locate_widget(make_napari_viewer, capsys):

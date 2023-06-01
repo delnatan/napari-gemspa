@@ -1,10 +1,12 @@
-from qtpy.QtWidgets import (QWidget, QVBoxLayout, QTextEdit, QGridLayout, QLabel)
-from qtpy.QtCore import Signal, QObject, QThread
-from ._gemspa_data_views import GEMspaTableWindow, GEMspaPlottingWindow
-import pandas as pd
-from ._utils import show_error
-
 """Defines: GEMspaWidget, GEMspaWorker, GEMspaLogWidget"""
+
+import numpy as np
+import pandas as pd
+from qtpy.QtCore import QObject, QThread, Signal
+from qtpy.QtWidgets import QGridLayout, QLabel, QTextEdit, QVBoxLayout, QWidget
+
+from ._gemspa_data_views import GEMspaPlottingWindow, GEMspaTableWindow
+from ._utils import show_error
 
 
 class GEMspaWorker(QObject):
@@ -24,38 +26,38 @@ class GEMspaWorker(QObject):
 
     @staticmethod
     def _make_trackpy_table(layer_type, data, props):
-        req_cols = ['mass', 'size', 'ecc', 'signal', 'raw_mass', 'ep']
+        req_cols = ["mass", "size", "ecc", "signal", "raw_mass", "ep"]
         for col in req_cols:
             if col not in props.keys():
                 return None
-        if layer_type == 'points':
+        if layer_type == "points":
             df = pd.DataFrame()
             if data.shape[1] == 2:
                 i = 0
             elif data.shape[1] == 3:
-                df['frame'] = data[:, 0]
+                df["frame"] = data[:, 0]
                 i = 1
             else:  # data.shape[1] >= 4
-                df['frame'] = data[:, 0]
-                df['z'] = data[:, 1]
+                df["frame"] = data[:, 0]
+                df["z"] = data[:, 1]
                 i = 2
-            df['y'] = data[:, i]
-            df['x'] = data[:, i + 1]
+            df["y"] = data[:, i]
+            df["x"] = data[:, i + 1]
             for col in props.keys():
                 df[col] = props[col]
-        elif layer_type == 'tracks':
+        elif layer_type == "tracks":
             df = pd.DataFrame()
-            df['particle'] = data[:, 0]
-            df['frame'] = data[:, 1]
+            df["particle"] = data[:, 0]
+            df["frame"] = data[:, 1]
             if data.shape[1] == 4:
                 i = 2
             else:  # data.shape[1] >= 5
-                df['z'] = data[:, 2]
+                df["z"] = data[:, 2]
                 i = 3
-            df['y'] = data[:, i]
-            df['x'] = data[:, i+1]
+            df["y"] = data[:, i]
+            df["x"] = data[:, i + 1]
             for col in props.keys():
-                if col != 'track_id':
+                if col != "track_id":
                     df[col] = props[col]
         else:
             raise ValueError(f"Invalid layer type: {layer_type}")
@@ -69,11 +71,9 @@ class GEMspaWorker(QObject):
 
 
 class GEMspaWidget(QWidget):
-    """Definition of a GEMspa napari widget
+    """Definition of a GEMspa napari widget"""
 
-    """
-
-    name = 'GEMspaWidget'
+    name = "GEMspaWidget"
 
     def __init__(self, napari_viewer, title=None):
         super().__init__()
@@ -95,7 +95,6 @@ class GEMspaWidget(QWidget):
         self._required_inputs = []
 
     def init_ui(self):
-
         layout = QVBoxLayout()
 
         # Set up the input GUI items
@@ -133,7 +132,7 @@ class GEMspaWidget(QWidget):
             viewer.close()
             viewer.deleteLater()
 
-    def _new_plots_viewer(self, title='Plot view', figsize=(8, 3), close_last=True):
+    def _new_plots_viewer(self, title="Plot view", figsize=(8, 3), close_last=True):
         if close_last and len(self.plots_viewers) >= 1:
             viewer = self.plots_viewers.pop()
             viewer.close()
@@ -144,7 +143,7 @@ class GEMspaWidget(QWidget):
         self.plots_viewers[i].setWindowTitle(title)
         return self.plots_viewers[i]
 
-    def _new_properties_viewer(self, title='Table view', close_last=True):
+    def _new_properties_viewer(self, title="Table view", close_last=True):
         if close_last and len(self.properties_viewers) >= 1:
             viewer = self.properties_viewers.pop()
             viewer.close()
@@ -156,7 +155,6 @@ class GEMspaWidget(QWidget):
         return self.properties_viewers[i]
 
     def start_task(self, layer_names, log_widget):
-
         # Perform startup tasks and start thread: worker must be initialized before this function is called
 
         # Thread for this worker
@@ -194,25 +192,27 @@ class GEMspaWidget(QWidget):
         return valid
 
     def _add_napari_layer(self, layer_type, df, **kwargs):
-
         if layer_type == "points":
-            if 'z' in df.columns:
-                data_cols = ['frame', 'z', 'y', 'x']
+            if "z" in df.columns:
+                data_cols = ["frame", "z", "y", "x"]
             else:
-                data_cols = ['frame', 'y', 'x']
+                data_cols = ["frame", "y", "x"]
         elif layer_type == "tracks":
-            if 'z' in df.columns:
-                data_cols = ['track_id', 'frame', 'z', 'y', 'x']
+            if "z" in df.columns:
+                data_cols = ["track_id", "frame", "z", "y", "x"]
             else:
-                data_cols = ['track_id', 'frame', 'y', 'x']
+                data_cols = ["track_id", "frame", "y", "x"]
         else:
-            raise ValueError(f"Unrecognized layer type: {layer_type}.  Expected points or tracks.")
+            raise ValueError(
+                f"Unrecognized layer type: {layer_type}.  Expected points or tracks."
+            )
 
         data = df[data_cols].to_numpy()
+        # df = df.fillna('')
         props = {}
         for col in df.columns:
             if col not in data_cols:
-                props[col] = df[col].to_numpy()
+                props[col] = np.nan_to_num(df[col].to_numpy())
 
         add_layer = getattr(self.viewer, f"add_{layer_type}")
         return add_layer(data, properties=props, **kwargs)
@@ -220,6 +220,7 @@ class GEMspaWidget(QWidget):
 
 class GEMspaLogWidget(QWidget):
     """Widget to log the GEMspa plugin messages in the graphical interface"""
+
     def __init__(self):
         super().__init__()
 
@@ -236,6 +237,3 @@ class GEMspaLogWidget(QWidget):
     def clear_log(self):
         """Callback to clear all the log area"""
         self.log_area.clear()
-
-
-

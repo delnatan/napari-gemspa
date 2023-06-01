@@ -8,10 +8,11 @@ Replace code below according to your needs.
 """
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING, Any, List, Sequence, Tuple, Union
 
+import numpy as np
 import pandas as pd
-import os
 
 if TYPE_CHECKING:
     DataType = Union[Any, Sequence[Any]]
@@ -20,10 +21,10 @@ if TYPE_CHECKING:
 
 def _save_data(df, path):
     ext = os.path.splitext(path)[1]
-    if ext == '.csv':
-        sep = ','
-    elif ext == '.txt' or ext == '.tsv':
-        sep = '\t'
+    if ext == ".csv":
+        sep = ","
+    elif ext == ".txt" or ext == ".tsv":
+        sep = "\t"
     else:
         raise ValueError(f"{path}: file extension is invalid")
 
@@ -44,19 +45,19 @@ def write_points(path: str, data: Any, meta: dict) -> List[str]:
 
     df = pd.DataFrame()
     if data.shape[1] == 2:
-        #df['frame'] = np.zeros(data.shape[0], dtype=int)
+        # df['frame'] = np.zeros(data.shape[0], dtype=int)
         i = 0
     elif data.shape[1] == 3:
-        df['frame'] = data[:, 0]
+        df["frame"] = data[:, 0]
         i = 1
     else:  # data.shape[1] >= 4
-        df['frame'] = data[:, 0]
-        df['z'] = data[:, 1]
+        df["frame"] = data[:, 0]
+        df["z"] = data[:, 1]
         i = 2
-    df['y'] = data[:, i]
-    df['x'] = data[:, i+1]
-    for col in meta['properties'].keys():
-        df[col] = meta['properties'][col]
+    df["y"] = data[:, i]
+    df["x"] = data[:, i + 1]
+    for col in meta["properties"].keys():
+        df[col] = meta["properties"][col]
 
     _save_data(df, path)
 
@@ -75,18 +76,32 @@ def write_tracks(path: str, data: Any, meta: dict) -> List[str]:
         raise ValueError("Tracks layer data cannot be saved with GEMspa.")
 
     df = pd.DataFrame()
-    df['track_id'] = data[:, 0]
-    df['frame'] = data[:, 1]
+    df["track_id"] = data[:, 0]
+    df["frame"] = data[:, 1]
     if data.shape[1] == 4:
         i = 2
     else:  # data.shape[1] >= 5
-        df['z'] = data[:, 2]
+        df["z"] = data[:, 2]
         i = 3
 
-    df['y'] = data[:, i]
-    df['x'] = data[:, i+1]
-    for col in meta['properties'].keys():
-        df[col] = meta['properties'][col]
+    df["y"] = data[:, i]
+    df["x"] = data[:, i + 1]
+    for col in meta["properties"].keys():
+        df[col] = meta["properties"][col]
+
+    # If columns for msd/step-size/radius_gyration, set first frame to empty instead of 0
+    # If columns for MSD_fitted and fitting data, set fitting data to empty where MSD_fitted==0
+
+    for col in ["msd", "step_size", "radius_gyration"]:
+        if col in df.columns:
+            df[col].where(df["frame"] > df["frame_start"], other=np.nan, inplace=True)
+
+    fitting_columns = ["D", "E", "r_sq (lin)", "K", "a", "r_sq (log)"]
+
+    if set(fitting_columns).issubset(set(df.columns)) and "MSD_fitted" in df.columns:
+        df[fitting_columns] = df[fitting_columns].where(
+            df["MSD_fitted"] == 1, other=np.nan
+        )
 
     _save_data(df, path)
 
