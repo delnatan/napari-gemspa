@@ -377,6 +377,7 @@ class GEMspaAnalyzeWidget(GEMspaWidget):
             QCheckBox("Anomalous exponent (alpha)"),
             QCheckBox("Step size (microns)"),
             QCheckBox("Goodness-of-fit for D (R-sq)"),
+            QCheckBox("Track length (frames)"),
             QCheckBox("Time (from track start)"),
             QCheckBox("Time (from movie start)"),
         ]
@@ -386,6 +387,7 @@ class GEMspaAnalyzeWidget(GEMspaWidget):
             "Anomalous exponent (alpha)": "a",
             "Step size (microns)": "step_size",
             "Goodness-of-fit for D (R-sq)": "r_sq (lin)",
+            "Track length (frames)": "track_length",
             "Time (from movie start)": "frame",
             "Time (from track start)": "t",
         }
@@ -582,7 +584,7 @@ class GEMspaAnalyzeWidget(GEMspaWidget):
                 kwargs = {
                     "scale": out_dict["tracks_layer_scale"],
                     "blending": "translucent",
-                    "tail_length": df["frame"].max(),
+                    "tail_length": int(df["frame"].max()),
                     "name": "Analyzed tracks",
                 }
 
