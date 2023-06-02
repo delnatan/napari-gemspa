@@ -277,19 +277,20 @@ class GEMspaPlottingWindow(QMainWindow):
             and "msd" in out_data["summary_data"]
         ):
             plot_data = out_data["summary_data"]
+            df = out_data["df"]
             msd = plot_data["msd"]
-            df = plot_data["fit_results"]
+            summary_df = plot_data["fit_results"]
 
             # Table of data
-            self._fill_table(summary_table, df)
+            self._fill_table(summary_table, summary_df)
 
-            D = df[df.dim == "sum"].iloc[0]["D"]
-            alpha = df[df.dim == "sum"].iloc[0]["a"]
-            track_id = int(df.iloc[0]["track_id"])
+            D = summary_df[summary_df.dim == "sum"].iloc[0]["D"]
+            alpha = summary_df[summary_df.dim == "sum"].iloc[0]["a"]
+            track_id = int(summary_df.iloc[0]["track_id"])
 
             # Make plots (MSD of track, with fit line, linear and loglog scale)
             self.canvas.figure.clear()
-            axs = self.canvas.figure.subplots(1, 3)
+            axs = self.canvas.figure.subplots(1, 4)
             axs[0].scatter(msd[:, 0], msd[:, 1])
             axs[1].scatter(msd[:, 0], msd[:, 1])
             axs[1].set_xscale("log", base=10)
@@ -304,26 +305,32 @@ class GEMspaPlottingWindow(QMainWindow):
                 f"track {track_id} log-log MSD (2d)\n" + r"$\alpha$ = " + f"{alpha}"
             )
 
-            # Make plot of the track itself...
-            df = out_data["df"]
-            x_min = df["x"].min()
-            y_min = df["y"].min()
+            # Make plot of radius of gyration...
+            axs[2].plot(df["t"], df["radius_gyration"])
+            axs[2].set_title(f"track {track_id}")
+            axs[2].set(xlabel="t (s)", ylabel="radius gyration " + r"($\mu m$)")
 
-            axs[2].plot(df["x"] - x_min, df["y"] - y_min)
-            axs[2].plot(
-                df.iloc[0]["x"] - x_min,
-                df.iloc[0]["y"] - y_min,
+            # Make plot of the track itself...
+            x_values = df["x (microns)"].to_numpy()
+            y_values = df["y (microns)"].to_numpy()
+            x_min = np.min(x_values)
+            y_min = np.min(y_values)
+
+            axs[3].plot(x_values - x_min, y_values - y_min)
+            axs[3].plot(
+                x_values[0] - x_min,
+                y_values[0] - y_min,
                 ".",
                 color="green",
             )
-            axs[2].plot(
-                df.iloc[-1]["x"] - x_min,
-                df.iloc[-1]["y"] - y_min,
+            axs[3].plot(
+                x_values[-1] - x_min,
+                y_values[-1] - y_min,
                 ".",
                 color="red",
             )
-            axs[2].set_title(f"track {track_id}")
-            axs[2].set(xlabel="x", ylabel="y")
+            axs[3].set_title(f"track {track_id}")
+            axs[3].set(xlabel=r"x ($\mu m$)", ylabel=r"y ($\mu m$)")
 
         self.canvas.figure.tight_layout()
 

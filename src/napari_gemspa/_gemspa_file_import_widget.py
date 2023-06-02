@@ -1,79 +1,119 @@
-from qtpy.QtWidgets import (QGridLayout, QVBoxLayout, QFileDialog, QRadioButton, QPushButton, QWidget,
-                            QLabel, QGroupBox)
-from ._utils import show_error
-import os
-import pandas as pd
-import nd2
-from skimage import io
-import napari
-import numpy as np
-from gemspa_spt import ParticleTracks
-
-
 """Defines: GEMspaFileImport, GEMspaFileImportWidget"""
+
+import os
+
+import napari
+import nd2
+import numpy as np
+import pandas as pd
+from gemspa_spt import ParticleTracks
+from qtpy.QtWidgets import (
+    QFileDialog,
+    QGridLayout,
+    QGroupBox,
+    QLabel,
+    QPushButton,
+    QRadioButton,
+    QVBoxLayout,
+    QWidget,
+)
+from skimage import io
+
+from ._utils import show_error
 
 
 class GEMspaFileImport:
-
     def __init__(self, path, data_format):
-
         if data_format not in ParticleTracks.file_columns.keys():
-            raise ValueError(f"Unexpected file format: {data_format} when importing file.")
+            raise ValueError(
+                f"Unexpected file format: {data_format} when importing file."
+            )
 
         self.file_path = path
         self.file_format = data_format
         file_ext = os.path.splitext(self.file_path)[1].lower()
-        if file_ext == '.csv':
-            self.file_sep = ','
-        elif file_ext == '.txt' or file_ext == '.tsv':
-            self.file_sep = '\t'
+        if file_ext == ".csv":
+            self.file_sep = ","
+        elif file_ext == ".txt" or file_ext == ".tsv":
+            self.file_sep = "\t"
         else:
-            print(f"Unknown extension found for '{self.file_path}'. Attempting to open as a tab-delimited text file.")
-            self.file_sep = '\t'
+            print(
+                f"Unknown extension found for '{self.file_path}'. Attempting to open as a tab-delimited text file."
+            )
+            self.file_sep = "\t"
 
-        self.file_df = pd.read_csv(self.file_path, sep=self.file_sep, header=0,
-                                   skiprows=ParticleTracks.skip_rows[data_format])
-        self.file_df.columns = [item.lower() for item in self.file_df.columns]
+        self.file_df = pd.read_csv(
+            self.file_path,
+            sep=self.file_sep,
+            header=0,
+            skiprows=ParticleTracks.skip_rows[data_format],
+        )
+
+    def find_col(self, target_string):
+        lower_target = target_string.lower()
+        for col in self.file_df.columns:
+            if col.lower() == lower_target:
+                return col
+        return None
 
     def get_layer_data(self):
-
         all_cols = ParticleTracks.file_columns[self.file_format]
-        cols = all_cols[3:5]  # ['y','x']: mandatory
-        for col in cols:
-            if col not in self.file_df.columns:
-                raise Exception(f"Error in importing file: required column {col} is missing.")
+        orig_cols = []
 
-        if all_cols[2] in self.file_df.columns:  # 'z': optional, add if it exists
-            cols.insert(0, all_cols[2])
+        # 'x' is mandatory
+        col = self.find_col(all_cols[4])
+        if col is None:
+            raise Exception(
+                f"Error in importing file: required column {all_cols[4]} is missing."
+            )
+        orig_cols.insert(0, col)
 
-        if all_cols[1] in self.file_df.columns:  # 'frame': optional, add if it exists
-            cols.insert(0, all_cols[1])
+        # 'y' is mandatory
+        col = self.find_col(all_cols[3])
+        if col is None:
+            raise Exception(
+                f"Error in importing file: required column {all_cols[3]} is missing."
+            )
+        orig_cols.insert(0, col)
 
-        if all_cols[0] in self.file_df.columns:  # 'track_id': optional, if it exists this is tracks data (not points)
-            if cols[0] != all_cols[1]:  # must have 'frame' column if there is a 'track_id' column
+        # 'z' is optional
+        col = self.find_col(all_cols[2])
+        if col:
+            orig_cols.insert(0, col)
+
+        # 'frame' is optional
+        frame_col = self.find_col(all_cols[1])
+        if frame_col:
+            orig_cols.insert(0, frame_col)
+
+        # 'track_id' is optional; if it exists this is tracks data (not points)
+        track_id_col = self.find_col(all_cols[0])
+        if track_id_col:
+            if frame_col is None:
                 raise Exception(
-                    f"Error in importing file data: data appears to be tracks layer but frame column is missing.")
-            cols.insert(0, all_cols[0])
+                    "Error in importing file data: data appears to be tracks layer but frame column is missing."
+                )
+            orig_cols.insert(0, track_id_col)
             layer_type = "tracks"
         else:
             layer_type = "points"
 
         # data and properties for the layer data tuple
-        data = self.file_df[cols].to_numpy()
+        data = self.file_df[orig_cols].to_numpy()
         props = {}
         for col in self.file_df.columns:
-            if col not in cols:
-                props[col] = self.file_df[col].to_numpy()
+            if col not in orig_cols:
+                # nan_to_num because napari properties does not handle nan data
+                props[col] = np.nan_to_num(self.file_df[col].to_numpy())
 
         # add properties and other keyword args
-        add_kwargs = {'properties': props,
-                      'name': os.path.split(self.file_path)[1]}
-        if layer_type == 'points':
-            add_kwargs['face_color'] = 'transparent'
-            add_kwargs['edge_color'] = 'red'
-        elif layer_type == 'tracks':
-            add_kwargs['blending'] = 'translucent'
-            add_kwargs['tail_length'] = data[:, 1].max()
+        add_kwargs = {"properties": props, "name": os.path.split(self.file_path)[1]}
+        if layer_type == "points":
+            add_kwargs["face_color"] = "transparent"
+            add_kwargs["edge_color"] = "red"
+        elif layer_type == "tracks":
+            add_kwargs["blending"] = "translucent"
+            add_kwargs["tail_length"] = int(data[:, 1].max())
 
         return data, add_kwargs, layer_type
 
@@ -81,18 +121,19 @@ class GEMspaFileImport:
 class GEMspaFileImportWidget(QWidget):
     """Widget for Import file plugin"""
 
-    name = 'GEMspaFileImportWidget'
+    name = "GEMspaFileImportWidget"
 
     def __init__(self, napari_viewer):
         super().__init__()
 
         self.viewer = napari_viewer
 
-        self._track_file_format_rbs = [QRadioButton("GEMspa", self),
-                                       QRadioButton("Mosaic", self),
-                                       QRadioButton("Trackmate", self),
-                                       QRadioButton("Trackpy", self)
-                                       ]
+        self._track_file_format_rbs = [
+            QRadioButton("GEMspa", self),
+            QRadioButton("Mosaic", self),
+            QRadioButton("Trackmate", self),
+            QRadioButton("Trackpy", self),
+        ]
 
         self._open_tracks_file_btn = QPushButton("Open file...", self)
         self._open_image_file_btn = QPushButton("Open file...", self)
@@ -102,7 +143,6 @@ class GEMspaFileImportWidget(QWidget):
         self.init_ui()
 
     def init_ui(self):
-
         layout = QVBoxLayout()
 
         group = QGroupBox("Add image layer")
@@ -114,7 +154,9 @@ class GEMspaFileImportWidget(QWidget):
 
         group = QGroupBox("Add labels layer")
         group_layout = QGridLayout()
-        group_layout.addWidget(QLabel("Create blank 2D labels layer for selected image:"), 0, 0)
+        group_layout.addWidget(
+            QLabel("Create blank 2D labels layer for selected image:"), 0, 0
+        )
         group_layout.addWidget(self._new_labels_layer_btn, 0, 1)
         group_layout.addWidget(QLabel("Open labels file:"), 1, 0)
         group_layout.addWidget(self._open_labels_file_btn, 1, 1)
@@ -151,7 +193,7 @@ class GEMspaFileImportWidget(QWidget):
                 if isinstance(layer, napari.layers.image.image.Image):
                     # get final 2 image dimensions and create mask
                     dims = layer.data.shape[-2:]
-                    new_mask = np.zeros(dims, dtype='int64')
+                    new_mask = np.zeros(dims, dtype="int64")
                     self.viewer.add_labels(new_mask)
                     found_image = True
                     break
@@ -161,8 +203,7 @@ class GEMspaFileImportWidget(QWidget):
 
     def _load_image_file(self):
         filename, _ = QFileDialog.getOpenFileName(
-            self,
-            "time-lapse movies (*.tif *.tiff *.nd2)"
+            self, "time-lapse movies (*.tif *.tiff *.nd2)"
         )
         if filename:
             ext = os.path.splitext(filename)[1]
@@ -170,7 +211,7 @@ class GEMspaFileImportWidget(QWidget):
                 f = nd2.ND2File(filename)
                 images = f.asarray()
                 f.close()
-            elif ext == '.tif' or ext == '.tiff':
+            elif ext == ".tif" or ext == ".tiff":
                 images = io.imread(filename)
             else:
                 raise ValueError(f"Unrecognized file extension for image file {ext}")
@@ -180,23 +221,20 @@ class GEMspaFileImportWidget(QWidget):
     def _load_labels_file(self):
         filename, _ = QFileDialog.getOpenFileName(
             self,
-            "images with integer labels (*.png *.jpg *.jpeg *.bmp *.gif *.tif *.tiff *.jp2)"
+            "images with integer labels (*.png *.jpg *.jpeg *.bmp *.gif *.tif *.tiff *.jp2)",
         )
         if filename:
             labeled_image = io.imread(filename)
             self.viewer.add_labels(labeled_image, name=os.path.split(filename)[1])
 
     def _load_tracks_file(self):
-
         filename, _ = QFileDialog.getOpenFileName(
-            self,
-            "tab or comma delimited text files (*.txt *.tsv *.csv)"
+            self, "tab or comma delimited text files (*.txt *.tsv *.csv)"
         )
         if filename:
-
             # Get selected format for imported file
-            data_format = self._format_rbs[0].text()
-            for rb in self._format_rbs:
+            data_format = self._track_file_format_rbs[0].text()
+            for rb in self._track_file_format_rbs:
                 if rb.isChecked():
                     data_format = rb.text()
                     break
@@ -206,9 +244,9 @@ class GEMspaFileImportWidget(QWidget):
             layer_data = file_import.get_layer_data()
 
             # Add layer (points or tracks)
-            if layer_data[2] == 'points':
+            if layer_data[2] == "points":
                 self.viewer.add_points(layer_data[0], **layer_data[1])
-            elif layer_data[2] == 'tracks':
+            elif layer_data[2] == "tracks":
                 self.viewer.add_tracks(layer_data[0], **layer_data[1])
             else:
                 pass

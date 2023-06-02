@@ -87,6 +87,12 @@ class GEMspaAnalyzeWorker(GEMspaWorker):
         tracks.microns_per_pixel = microns_per_pixel
         tracks.time_lag_sec = time_lag_sec
 
+        # add the x/y/z positions in microns to the track data for output later
+        if "z" in track_data_df:
+            track_data_df["z (microns)"] = track_data_df["z"] * microns_per_pixel
+        track_data_df["y (microns)"] = track_data_df["y"] * microns_per_pixel
+        track_data_df["x (microns)"] = track_data_df["x"] * microns_per_pixel
+
         out_data = dict()
         if batch:
             # Ensemble average effective Diffusion (linear) and alpha (log-log)
@@ -190,14 +196,19 @@ class GEMspaAnalyzeWorker(GEMspaWorker):
             # Merge fit results with track data
             msds = pd.DataFrame(msds[:, [1, 5]], columns=["tau", "msd"])
             msds.msd = msds.msd.where(msds.tau > 0, other=np.nan)
+            msds = msds.round({"msd": 4})
+
             step_sizes = pd.DataFrame(step_sizes[:, [1, 5]], columns=["t", "step_size"])
             step_sizes.step_size = step_sizes.step_size.where(
                 step_sizes.t > 0, other=np.nan
             )
+            step_sizes = step_sizes.round({"step_size": 4})
+
             r_of_g = pd.DataFrame(r_of_g[:, 1:], columns=["t", "radius_gyration"])
             r_of_g.radius_gyration = r_of_g.radius_gyration.where(
                 r_of_g.t > 0, other=np.nan
             )
+            r_of_g = r_of_g.round({"radius_gyration": 4})
 
             track_lengths = pd.DataFrame(
                 tracks.track_lengths, columns=["track_id", "track_length"]
@@ -213,11 +224,13 @@ class GEMspaAnalyzeWorker(GEMspaWorker):
             )
 
             merged_data = track_data_df.merge(
-                all_fit_data, how="left", on="track_id", indicator="MSD_fitted"
+                all_fit_data, how="left", on="track_id", indicator="_merge"
             )
-
-            merged_data["MSD_fitted"].replace("both", 1, inplace=True)
-            merged_data["MSD_fitted"].replace("left_only", 0, inplace=True)
+            merged_data["MSD_fitted"] = 0
+            merged_data["MSD_fitted"].where(
+                merged_data["_merge"] != "both", other=1, inplace=True
+            )
+            merged_data.drop("_merge", axis=1, inplace=True)
             # TODO: confirm right_only does not exist in the column values
 
             # Add frame start and frame end to the fit results
@@ -328,12 +341,12 @@ class GEMspaAnalyzeWorker(GEMspaWorker):
                     "msd": msds[1 : max_lagtime_fit + 1, [0, 4]],
                 }
 
-                track_data_df = pd.DataFrame(
-                    tracks_layer_data[tracks_layer_data[:, 0] == track_id, :],
-                    columns=track_cols,
-                )
+                track_data_df = track_data_df[track_data_df["track_id"] == track_id]
+                track_data_df.index = range(len(track_data_df))
+
                 msds = pd.DataFrame(msds[:, [0, 4]], columns=["tau", "msd"])
                 msds = msds.round({"msd": 4})
+
                 step_sizes = pd.DataFrame(
                     step_sizes[:, [0, 4]], columns=["t", "step_size"]
                 )
@@ -626,40 +639,38 @@ class GEMspaAnalyzeWidget(GEMspaWidget):
                     # take last not first when dropping duplicates to pull the r-of-g for full length track
                     # remove the tracks that were filtered for length (fit results are all nan's)
                     df = df.drop_duplicates(subset="track_id", keep="last")
+                    df = df[df["MSD_fitted"] == 1]
                     df = df.drop(
                         labels=[
                             "frame",
                             "y",
                             "x",
+                            "y (microns)",
+                            "x (microns)",
                             "tau",
                             "msd",
                             "t",
                             "step_size",
+                            "MSD_fitted",
                         ],
                         axis=1,
                     )
                     if "z" in df.columns:
                         # also drop z if it exists
-                        df = df.drop(labels=["z"], axis=1)
-                    df.dropna(
-                        inplace=True,
-                        subset=[
-                            "D",
-                            "E",
-                            "r_sq (lin)",
-                            "K",
-                            "a",
-                            "r_sq (log)",
-                        ],
-                        how="all",
-                    )
+                        df = df.drop(labels=["z", "z (microns)"], axis=1)
 
                 properties_viewer = self._new_properties_viewer(title, close_last=False)
                 properties_viewer.reload_from_pandas(df)
                 properties_viewer.show()
 
             if "summary_data" in out_dict:
-                plots_viewer = self._new_plots_viewer(title, close_last=False)
+                if out_dict["batch"]:
+                    plots_viewer = self._new_plots_viewer(title, close_last=False)
+                else:
+                    plots_viewer = self._new_plots_viewer(
+                        title, figsize=(10, 3), close_last=False
+                    )
+
                 plots_viewer.plot_analyze_results(out_dict)
                 plots_viewer.show()
 

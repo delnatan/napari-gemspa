@@ -208,10 +208,10 @@ class GEMspaWidget(QWidget):
             )
 
         data = df[data_cols].to_numpy()
-        # df = df.fillna('')
         props = {}
         for col in df.columns:
             if col not in data_cols:
+                # nan_to_num because napari properties does not handle nan data
                 props[col] = np.nan_to_num(df[col].to_numpy())
 
         add_layer = getattr(self.viewer, f"add_{layer_type}")

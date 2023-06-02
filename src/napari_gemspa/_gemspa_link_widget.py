@@ -138,7 +138,7 @@ class GEMspaLinkWidget(GEMspaWidget):
             kwargs = {
                 "scale": out_dict["scale"],
                 "blending": "translucent",
-                "tail_length": df["frame"].max(),
+                "tail_length": int(df["frame"].max()),
                 "name": "Linked features",
             }
 
