@@ -93,9 +93,7 @@ class GEMspaPlottingWindow(QMainWindow):
         # Show track length histogram
         track_lengths = df["track_id"].value_counts(sort=False)
 
-        axs[2].hist(
-            track_lengths, bins=range(0, track_lengths.max() + 3, 3)
-        )  # , histtype='step')
+        axs[2].hist(track_lengths, bins=30)
         axs[2].set(xlabel="track length", ylabel="counts")
         axs[2].set_title("Track lengths histogram")
 
@@ -198,13 +196,13 @@ class GEMspaPlottingWindow(QMainWindow):
             if color_by == "t":
                 norm = mpl.colors.Normalize(vmin=0, vmax=1)
                 cmap = mpl.cm.ScalarMappable(norm=norm, cmap="jet")
-                cbar = self.canvas.figure.colorbar(cmap)
+                cbar = self.canvas.figure.colorbar(cmap, ax=ax)
                 cbar.set_ticks([0, 1])
                 cbar.set_ticklabels(["Start", "End"])
             else:
                 norm = mpl.colors.Normalize(vmin=min_val, vmax=max_val)
                 cmap = mpl.cm.ScalarMappable(norm=norm, cmap="jet")
-                cbar = self.canvas.figure.colorbar(cmap)
+                self.canvas.figure.colorbar(cmap, ax=ax)
 
         self.canvas.figure.tight_layout()
 
@@ -217,9 +215,7 @@ class GEMspaPlottingWindow(QMainWindow):
         # Show track length histogram
         track_lengths = df["track_id"].value_counts(sort=False)
 
-        axs[0].hist(
-            track_lengths, bins=range(0, track_lengths.max() + 3, 3)
-        )  # , histtype='step')
+        axs[0].hist(track_lengths, bins=30)
         axs[0].set(xlabel="track length", ylabel="counts")
         axs[0].set_title("Track lengths (# frames)")
 
@@ -227,7 +223,7 @@ class GEMspaPlottingWindow(QMainWindow):
         df = df.drop_duplicates(subset="track_id", keep="last")
         rg = df["radius_gyration"]
 
-        axs[1].hist(rg, bins=np.linspace(0, rg.max(), 30))  # , histtype='step')
+        axs[1].hist(rg, bins=30)
         axs[1].set(xlabel="radius", ylabel="counts")
         axs[1].set_title("Radius of gyration (microns)")
 
