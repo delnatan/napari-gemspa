@@ -4,6 +4,7 @@ import os
 
 import napari
 import nd2
+import mrc
 import numpy as np
 import pandas as pd
 from gemspa_spt import ParticleTracks
@@ -203,7 +204,7 @@ class GEMspaFileImportWidget(QWidget):
 
     def _load_image_file(self):
         filename, _ = QFileDialog.getOpenFileName(
-            self, "time-lapse movies (*.tif *.tiff *.nd2)"
+            self, "time-lapse movies (*.tif *.tiff *.nd2 *.dv)"
         )
         if filename:
             ext = os.path.splitext(filename)[1]
@@ -213,6 +214,10 @@ class GEMspaFileImportWidget(QWidget):
                 f.close()
             elif ext == ".tif" or ext == ".tiff":
                 images = io.imread(filename)
+            elif ext == ".dv":
+                f = mrc.DVFile(filename)
+                images = f.asarray()
+                f.close()
             else:
                 raise ValueError(f"Unrecognized file extension for image file {ext}")
 
