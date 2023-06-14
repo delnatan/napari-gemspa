@@ -13,12 +13,15 @@ from ._utils import convert_to_float, convert_to_int, show_error
 class GEMspaLinkWorker(GEMspaWorker):
     """Worker for the Link Features plugin"""
 
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         super().__init__()
+        self.args = args
+        self.kwargs = kwargs
 
     @Slot(dict)
-    def run(self, state):
+    def run(self):
         """Execute the processing"""
+        state = self.args[0]
 
         input_params = state["inputs"]
         state_params = state["parameters"]
@@ -54,18 +57,22 @@ class GEMspaLinkWorker(GEMspaWorker):
 
                 # perform linking
                 t = tp.link(f, search_range=search_range, memory=memory)
-                self.log.emit(f"Number of particles: {t['particle'].nunique()}")
+                self.signals.log.emit(
+                    f"Number of particles: {t['particle'].nunique()}"
+                )
 
                 # Filter spurious trajectories
                 if min_frames is not None and min_frames > 1:
                     t = tp.filter_stubs(t, threshold=min_frames)
-                    self.log.emit(
+                    self.signals.log.emit(
                         f"After filter for Min frames, number of particles: {t['particle'].nunique()}"
                     )
 
                 # emit the output data after sorting by track_id (particle) and frame (needed for tracks layer)
                 t.index.name = "index"  # pandas complains when index name and column name are the same
-                t = t.sort_values(by=["particle", "frame"], axis=0, ascending=True)
+                t = t.sort_values(
+                    by=["particle", "frame"], axis=0, ascending=True
+                )
 
                 # change column name from 'particle' to 'track_id' to identify the track for consistency with napari
                 t.rename(columns={"particle": "track_id"}, inplace=True)
@@ -74,14 +81,15 @@ class GEMspaLinkWorker(GEMspaWorker):
 
                 out_data = {"df": t, "scale": scale}
             else:
-                self.log.emit(
+                self.signals.log.emit(
                     "Error: The points layer properties do not contain the required columns for linking."
                 )
         else:
-            self.log.emit("The data does not have a dimension for linking.")
+            self.signals.log.emit(
+                "The data does not have a dimension for linking."
+            )
 
-        self.update_data.emit(out_data)
-        super().run()
+        self.signals.update_data.emit(out_data)
 
 
 class GEMspaLinkWidget(GEMspaWidget):
@@ -106,17 +114,23 @@ class GEMspaLinkWidget(GEMspaWidget):
         self.init_ui()
 
     def start_task(self, layer_names, log_widget):
-        # initialize worker and start task
-        self.worker = GEMspaLinkWorker()
-        super().start_task(layer_names, log_widget)
+        self.worker = GEMspaLinkWorker(self.state(layer_names))
+        self.worker.signals.log.connect(log_widget.add_log)
+        # once worker is done, do something with returned data
+        self.worker.signals.update_data.connect(self.update_data)
+        self.threadpool.start(self.worker)
 
     def state(self, layer_names) -> dict:
         return {
             "name": self.name,
             "inputs": {
                 "points_layer_name": layer_names["points"],
-                "points_layer_data": self.viewer.layers[layer_names["points"]].data,
-                "points_layer_scale": self.viewer.layers[layer_names["points"]].scale,
+                "points_layer_data": self.viewer.layers[
+                    layer_names["points"]
+                ].data,
+                "points_layer_scale": self.viewer.layers[
+                    layer_names["points"]
+                ].scale,
                 "points_layer_props": self.viewer.layers[
                     layer_names["points"]
                 ].properties,
@@ -126,7 +140,9 @@ class GEMspaLinkWidget(GEMspaWidget):
                     self._input_values["Link range"].text()
                 ),
                 "memory": convert_to_int(self._input_values["Memory"].text()),
-                "min_frames": convert_to_int(self._input_values["Min frames"].text()),
+                "min_frames": convert_to_int(
+                    self._input_values["Min frames"].text()
+                ),
             },
         }
 

@@ -11,12 +11,15 @@ from ._utils import convert_to_float, convert_to_int, show_error
 class GEMspaFilterLinksWorker(GEMspaWorker):
     """Worker for the Link Features plugin"""
 
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         super().__init__()
+        self.args = args
+        self.kwargs = kwargs
 
     @Slot(dict)
-    def run(self, state):
+    def run(self):
         """Execute the processing"""
+        state = self.args[0]
 
         input_params = state["inputs"]
         state_params = state["parameters"]
@@ -37,14 +40,14 @@ class GEMspaFilterLinksWorker(GEMspaWorker):
         out_data = dict()
         t = self._make_trackpy_table("tracks", tracks_layer_data, tracks_layer_props)
         if t is not None:
-            self.log.emit(f"Number of particles: {t['particle'].nunique()}")
+            self.signals.log.emit(f"Number of particles: {t['particle'].nunique()}")
 
             tp.quiet()
 
             # filter by min frames
             if min_frames is not None and min_frames > 1:
                 t = tp.filter_stubs(t, threshold=min_frames)
-                self.log.emit(
+                self.signals.log.emit(
                     f"After filter for Min frames, number of particles: {t['particle'].nunique()}"
                 )
 
@@ -67,7 +70,7 @@ class GEMspaFilterLinksWorker(GEMspaWorker):
                 mean_t = mean_t[mean_t["ecc"] <= max_ecc]
 
             t = t[t["particle"].isin(mean_t.index)]
-            self.log.emit(
+            self.signals.log.emit(
                 f"After filter for mass/size/eccentricity, number of particles: {t['particle'].nunique()}"
             )
 
@@ -82,12 +85,11 @@ class GEMspaFilterLinksWorker(GEMspaWorker):
 
             out_data = {"df": t, "scale": scale}
         else:
-            self.log.emit(
+            self.signals.log.emit(
                 "Error: The tracks layer properties do not contain the required columns for filtering."
             )
 
-        self.update_data.emit(out_data)
-        super().run()
+        self.signals.update_data.emit(out_data)
 
 
 class GEMspaFilterLinksWidget(GEMspaWidget):
@@ -114,8 +116,11 @@ class GEMspaFilterLinksWidget(GEMspaWidget):
 
     def start_task(self, layer_names, log_widget):
         # initialize worker and start task
-        self.worker = GEMspaFilterLinksWorker()
-        super().start_task(layer_names, log_widget)
+        self.worker = GEMspaFilterLinksWorker(self.state(layer_names))
+        self.worker.signals.log.connect(log_widget.add_log)
+        # once worker is done, do something with returned data
+        self.worker.signals.update_data.connect(self.update_data)
+        self.threadpool.start(self.worker)
 
     def state(self, layer_names) -> dict:
         return {
