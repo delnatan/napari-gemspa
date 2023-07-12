@@ -4,7 +4,13 @@ import warnings
 
 import trackpy as tp
 from qtpy.QtCore import Slot
-from qtpy.QtWidgets import QCheckBox, QGridLayout, QLabel, QLineEdit, QVBoxLayout
+from qtpy.QtWidgets import (
+    QCheckBox,
+    QGridLayout,
+    QLabel,
+    QLineEdit,
+    QVBoxLayout,
+)
 
 from ._gemspa_widget import GEMspaWidget, GEMspaWorker
 from ._utils import (
@@ -19,12 +25,16 @@ from ._utils import (
 class GEMspaLocateWorker(GEMspaWorker):
     """Worker for the Locate Features plugin"""
 
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         super().__init__()
+        self.args = args
+        self.kwargs = kwargs
 
-    @Slot(dict)
-    def run(self, state):
+    @Slot()
+    def run(self):
         """Execute the processing"""
+        # for now, assume that the first argument is the 'state'
+        state = self.args[0]
 
         input_params = state["inputs"]
         state_params = state["parameters"]
@@ -65,7 +75,9 @@ class GEMspaLocateWorker(GEMspaWorker):
             f = tp.locate(image[t], diameter, **state_params)
             if "frame" not in f.columns:
                 f["frame"] = t
-            self.log.emit(f"Processed frame {t}, number of particles: {len(f)}")
+            self.signals.log.emit(
+                f"Processed frame {t}, number of particles: {len(f)}"
+            )
         else:
             # process the entire movie - limited by frame start/end
             frame_offset = 0
@@ -78,7 +90,7 @@ class GEMspaLocateWorker(GEMspaWorker):
             f = tp.batch(image, diameter, **state_params)
             if "frame" in f.columns:
                 f["frame"] = f["frame"] + frame_offset
-            self.log.emit(
+            self.signals.log.emit(
                 f"Processed {len(image)} frames, number of particles: {len(f)}"
             )
 
@@ -88,14 +100,13 @@ class GEMspaLocateWorker(GEMspaWorker):
         if "labels_layer_data" in input_params:
             labeled_mask = input_params["labels_layer_data"]
             f = remove_outside_mask(f, labeled_mask)
-            self.log.emit(
+            self.signals.log.emit(
                 f"Removed particles outside of mask region, number of particles: {len(f)}"
             )
 
         out_data = {"df": f, "scale": scale, "diameter": diameter}
 
-        self.update_data.emit(out_data)
-        super().run()
+        self.signals.update_data.emit(out_data)
 
 
 class GEMspaLocateWidget(GEMspaWidget):
@@ -160,9 +171,13 @@ class GEMspaLocateWidget(GEMspaWidget):
         self.setLayout(layout)
 
     def start_task(self, layer_names, log_widget):
+        """this method overloads the parent implementation"""
         # initialize worker and start task
-        self.worker = GEMspaLocateWorker()
-        super().start_task(layer_names, log_widget)
+        self.worker = GEMspaLocateWorker(self.state(layer_names))
+        self.worker.signals.log.connect(log_widget.add_log)
+        # once worker is done, do something with returned data
+        self.worker.signals.update_data.connect(self.update_data)
+        self.threadpool.start(self.worker)
 
     def state(self, layer_names) -> dict:
         inputs_dict = {
@@ -181,18 +196,36 @@ class GEMspaLocateWidget(GEMspaWidget):
             "name": self.name,
             "inputs": inputs_dict,
             "parameters": {
-                "frame_start": convert_to_int(self._input_values["Frame start"].text()),
-                "frame_end": convert_to_int(self._input_values["Frame end"].text()),
-                "diameter": convert_to_float(self._input_values["Diameter"].text()),
-                "minmass": convert_to_float(self._input_values["Min mass"].text()),
-                "maxsize": convert_to_float(self._input_values["Max size"].text()),
-                "separation": convert_to_float(self._input_values["Separation"].text()),
-                "noise_size": convert_to_float(self._input_values["Noise size"].text()),
+                "frame_start": convert_to_int(
+                    self._input_values["Frame start"].text()
+                ),
+                "frame_end": convert_to_int(
+                    self._input_values["Frame end"].text()
+                ),
+                "diameter": convert_to_float(
+                    self._input_values["Diameter"].text()
+                ),
+                "minmass": convert_to_float(
+                    self._input_values["Min mass"].text()
+                ),
+                "maxsize": convert_to_float(
+                    self._input_values["Max size"].text()
+                ),
+                "separation": convert_to_float(
+                    self._input_values["Separation"].text()
+                ),
+                "noise_size": convert_to_float(
+                    self._input_values["Noise size"].text()
+                ),
                 "smoothing_size": convert_to_float(
                     self._input_values["Smoothing size"].text()
                 ),
-                "threshold": convert_to_float(self._input_values["Threshold"].text()),
-                "percentile": convert_to_float(self._input_values["Percentile"].text()),
+                "threshold": convert_to_float(
+                    self._input_values["Threshold"].text()
+                ),
+                "percentile": convert_to_float(
+                    self._input_values["Percentile"].text()
+                ),
                 "topn": convert_to_float(self._input_values["Top n"].text()),
                 "invert": self._invert_check.isChecked(),
                 "preprocess": self._preprocess_check.isChecked(),

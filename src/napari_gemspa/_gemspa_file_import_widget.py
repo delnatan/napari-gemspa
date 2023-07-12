@@ -203,7 +203,7 @@ class GEMspaFileImportWidget(QWidget):
 
     def _load_image_file(self):
         filename, _ = QFileDialog.getOpenFileName(
-            self, "time-lapse movies (*.tif *.tiff *.nd2)"
+            self, "time-lapse movies (*.tif *.tiff *.nd2 *.dv)"
         )
         if filename:
             ext = os.path.splitext(filename)[1]

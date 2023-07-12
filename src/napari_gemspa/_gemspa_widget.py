@@ -2,27 +2,40 @@
 
 import numpy as np
 import pandas as pd
-from qtpy.QtCore import QObject, QThread, Signal
+from qtpy.QtCore import (
+    QObject,
+    QThread,
+    Signal,
+    QRunnable,
+    Signal,
+    Slot,
+    QThreadPool,
+)
 from qtpy.QtWidgets import QGridLayout, QLabel, QTextEdit, QVBoxLayout, QWidget
 
 from ._gemspa_data_views import GEMspaPlottingWindow, GEMspaTableWindow
 from ._utils import show_error
 
 
-class GEMspaWorker(QObject):
+class GEMspaSignals(QObject):
+    """defines custom signals available from a working worker thread"""
+
+    finished = Signal()
+    error = Signal(str)
+    log = Signal(str)
+    update_data = Signal(dict)
+
+
+class GEMspaWorker(QRunnable):
     """Definition of a GEMspaWorker
 
     Receives and Sends input/output as a dictionary
 
     """
 
-    # Worker can send these signals
-    finished = Signal()
-    update_data = Signal(dict)
-    log = Signal(str)
-
     def __init__(self):
         super().__init__()
+        self.signals = GEMspaSignals()
 
     @staticmethod
     def _make_trackpy_table(layer_type, data, props):
@@ -64,10 +77,12 @@ class GEMspaWorker(QObject):
 
         return df
 
+    @Slot()
     def run(self):
-        """Exec the data processing"""
-
-        self.finished.emit()
+        """Exec the data processing
+        Each GEMspaWorker sub-class needs to implement this method
+        """
+        self.signals.finished.emit()
 
 
 class GEMspaWidget(QWidget):
@@ -80,7 +95,7 @@ class GEMspaWidget(QWidget):
 
         self.viewer = napari_viewer
         self.title = title
-        self.thread = None
+        self.threadpool = QThreadPool()
         self.worker = None
 
         # viewers for feature properties
@@ -132,14 +147,18 @@ class GEMspaWidget(QWidget):
             viewer.close()
             viewer.deleteLater()
 
-    def _new_plots_viewer(self, title="Plot view", figsize=(8, 3), close_last=True):
+    def _new_plots_viewer(
+        self, title="Plot view", figsize=(8, 3), close_last=True
+    ):
         if close_last and len(self.plots_viewers) >= 1:
             viewer = self.plots_viewers.pop()
             viewer.close()
             viewer.deleteLater()
 
         i = len(self.plots_viewers)
-        self.plots_viewers.append(GEMspaPlottingWindow(self.viewer, figsize=figsize))
+        self.plots_viewers.append(
+            GEMspaPlottingWindow(self.viewer, figsize=figsize)
+        )
         self.plots_viewers[i].setWindowTitle(title)
         return self.plots_viewers[i]
 
@@ -155,27 +174,8 @@ class GEMspaWidget(QWidget):
         return self.properties_viewers[i]
 
     def start_task(self, layer_names, log_widget):
-        # Perform startup tasks and start thread: worker must be initialized before this function is called
-
-        # Thread for this worker
-        self.thread = QThread()
-        self.worker.moveToThread(self.thread)
-
-        # connect worker log signal to the GEMspaLogWidget all_log method
-        self.worker.log.connect(log_widget.add_log)
-
-        # when thread is started, worker is run with the current state of the widget as input
-        self.thread.started.connect(lambda: self.worker.run(self.state(layer_names)))
-
-        # when the worker sends update_data signal, update_data of the widget will execute to update the GUI
-        self.worker.update_data.connect(self.update_data)
-
-        # Cleanup (as chatGPT suggested)
-        self.worker.finished.connect(self.thread.quit)
-        self.worker.finished.connect(self.worker.deleteLater)
-        self.thread.finished.connect(self.thread.deleteLater)
-
-        self.thread.start()
+        """must be implemented as overloaded method in subclasses"""
+        pass
 
     def check_inputs(self):
         valid = True

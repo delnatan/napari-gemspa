@@ -20,12 +20,15 @@ from ._utils import convert_to_float, convert_to_int, remove_outside_mask, show_
 class GEMspaAnalyzeWorker(GEMspaWorker):
     """Worker for the Analyze plugin"""
 
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         super().__init__()
+        self.args = args
+        self.kwargs = kwargs
 
     @Slot(dict)
-    def run(self, state):
+    def run(self):
         """Execute the processing"""
+        state = self.args[0]
 
         input_params = state["inputs"]
         state_params = state["parameters"]
@@ -74,7 +77,7 @@ class GEMspaAnalyzeWorker(GEMspaWorker):
             track_data_df = remove_outside_mask(
                 track_data_df, labeled_mask, id_column="track_id"
             )
-            self.log.emit(
+            self.signals.log.emit(
                 f"Removed particles outside of mask region, number of particles: {track_data_df['track_id'].nunique()}"
             )
 
@@ -158,7 +161,7 @@ class GEMspaAnalyzeWorker(GEMspaWorker):
                 err=error_term_fit,
             )
 
-            self.log.emit(
+            self.signals.log.emit(
                 f"Total number of tracks: {len(tracks.track_ids)}\n"
                 + f"After length filter, number of tracks: {len(tracks.linear_fit_results)}\n"
             )
@@ -365,10 +368,9 @@ class GEMspaAnalyzeWorker(GEMspaWorker):
                     "batch": batch,
                 }
             else:
-                self.log.emit(f"Track id {track_id} not found.")
+                self.signals.log.emit(f"Track id {track_id} not found.")
 
-        self.update_data.emit(out_data)
-        super().run()
+        self.signals.update_data.emit(out_data)
 
 
 class GEMspaAnalyzeWidget(GEMspaWidget):
@@ -485,8 +487,11 @@ class GEMspaAnalyzeWidget(GEMspaWidget):
 
     def start_task(self, layer_names, log_widget):
         # initialize worker and start task
-        self.worker = GEMspaAnalyzeWorker()
-        super().start_task(layer_names, log_widget)
+        self.worker = GEMspaAnalyzeWorker(self.state(layer_names))
+        self.worker.signals.log.connect(log_widget.add_log)
+        # once worker is done, do something with returned data
+        self.worker.signals.update_data.connect(self.update_data)
+        self.threadpool.start(self.worker)
 
     def check_inputs(self):
         # Special case for track id, it is required if batch is not checked
