@@ -242,7 +242,7 @@ class GEMspaLocateWidget(GEMspaWidget):
                 "size": out_dict["diameter"],
                 "name": "Feature Locations",
                 "face_color": "transparent",
-                "edge_color": "red",
+                "edge_color": "magenta",
             }
             df = out_dict["df"]
 
